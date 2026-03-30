@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: public_spending_db
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: rootpassword
+      POSTGRES_DB: public_spending
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d public_spending"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spending_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: public_spending_cache
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spending_network
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  spending_network:
+    driver: bridge

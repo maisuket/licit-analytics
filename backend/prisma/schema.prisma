@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TipoDespesa {
+  EMPENHO
+  LIQUIDACAO
+  PAGAMENTO
+}
+
+model Company {
+  id        String     @id @default(uuid())
+  cnpj      String     @unique @db.VarChar(14)
+  name      String
+  expenses  Expense[]
+  contracts Contract[]
+  
+  @@map("companies")
+}
+
+model Expense {
+  id              String      @id @default(uuid())
+  companyId       String
+  orgao           String
+  orgaoSuperior   String?     @db.VarChar(255) // NOVO: Ex: Ministério da Defesa
+  unidadeGestora  String?     @db.VarChar(255) // NOVO: Ex: Centro de Intendência...
+  tipo            TipoDespesa
+  valor           Decimal     @db.Decimal(15, 2)
+  data            DateTime
+  descricao       String      @db.Text
+  numeroDocumento String
+  numeroProcesso  String?     @db.VarChar(100) // NOVO: Número do processo licitatório
+  elementoDespesa String?     @db.VarChar(255) // NOVO: Categoria do gasto
+  company         Company     @relation(fields: [companyId], references: [id])
+
+  @@map("expenses")
+}
+
+model Contract {
+  id                 String    @id @default(uuid())
+  companyId          String
+  numero             String    @db.VarChar(100)
+  objeto             String    @db.Text
+  dataAssinatura     DateTime?
+  dataInicioVigencia DateTime?
+  dataFimVigencia    DateTime?
+  valorInicial       Decimal   @db.Decimal(15, 2)
+  valorFinal         Decimal   @db.Decimal(15, 2)
+  situacao           String    @db.VarChar(100)
+  unidadeGestora     String    @db.VarChar(255)
+  orgaoSuperior      String?   @db.VarChar(255)
+  
+  company            Company   @relation(fields: [companyId], references: [id])
+
+  @@map("contracts")
+}
