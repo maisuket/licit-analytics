@@ -3,12 +3,14 @@ import {
   Post,
   Get,
   Param,
+  Query,
   HttpStatus,
   HttpCode,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { ContractService } from './contract.service';
 import { ContractResponseDto } from './dto/contract.dto';
+import { QueryContractDto } from './dto/query-contract.dto';
 
 @ApiTags('Contracts')
 @Controller('contract')
@@ -32,18 +34,20 @@ export class ContractController {
   }
 
   @Get(':cnpj')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Lista os contratos salvos na base de dados local para uma empresa',
+      'Lista os contratos salvos na base de dados local para uma empresa com paginação e pesquisa',
   })
   @ApiParam({ name: 'cnpj', description: 'CNPJ com 14 dígitos numéricos' })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Lista de contratos devolvida com sucesso.',
-    type: [ContractResponseDto], // O Swagger agora sabe exatamente o que esta rota devolve!
+    description: 'Lista paginada de contratos devolvida com sucesso.',
   })
-  async findCompanyContracts(@Param('cnpj') cnpj: string) {
-    // O GET agora faz o que um GET deve fazer: Apenas ler a base de dados.
-    return this.contractService.findByCompanyCnpj(cnpj);
+  async findCompanyContracts(
+    @Param('cnpj') cnpj: string,
+    @Query() query: QueryContractDto,
+  ) {
+    return this.contractService.findByCompanyCnpj(cnpj, query);
   }
 }

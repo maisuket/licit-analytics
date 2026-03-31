@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-class FavorecidoDto {
+export class FavorecidoDto {
   @ApiProperty({ example: 'EMPRESA DO AMIGO LTDA' })
   nome: string;
 
@@ -8,15 +8,15 @@ class FavorecidoDto {
   cnpjFormatado: string;
 }
 
-class UnidadeGestoraDto {
+export class UnidadeGestoraDto {
   @ApiProperty({ example: 'MINISTÉRIO DA EDUCAÇÃO' })
   nome: string;
 
-  @ApiProperty({ example: 'Ministério da Educação', required: false })
+  @ApiPropertyOptional({ example: 'Ministério da Educação' })
   orgaoSuperior?: string | null;
 }
 
-class DashboardEmpenhoDto {
+export class DashboardEmpenhoDto {
   @ApiProperty({ example: 'e7b8... (UUID)' })
   id: string;
 
@@ -29,13 +29,13 @@ class DashboardEmpenhoDto {
   @ApiProperty({ example: '15.500,00' })
   valorOriginal: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ description: 'Processo SEI ou interno associado' })
   processo?: string | null;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ description: 'Código do elemento de despesa' })
   elemento?: string | null;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ description: 'Observações e descrição do serviço' })
   observacao?: string | null;
 
   @ApiProperty({ type: FavorecidoDto })
@@ -45,8 +45,7 @@ class DashboardEmpenhoDto {
   unidadeGestora: UnidadeGestoraDto;
 }
 
-// NOVO: DTO para os contratos
-class DashboardContratoDto {
+export class DashboardContratoDto {
   @ApiProperty({ example: 'uuid-do-banco' })
   id: string;
 
@@ -72,7 +71,7 @@ class DashboardContratoDto {
   orgao: string;
 }
 
-class DashboardStatsDto {
+export class DashboardStatsDto {
   @ApiProperty({ example: 'R$ 23.700,50' })
   totalEmpenhado: string;
 
@@ -91,5 +90,5 @@ export class DashboardResponseDto {
   empenhos: DashboardEmpenhoDto[];
 
   @ApiProperty({ type: [DashboardContratoDto] })
-  contratos: DashboardContratoDto[]; // NOVO ARRAY ADICIONADO AO RETORNO
+  contratos: DashboardContratoDto[];
 }

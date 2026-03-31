@@ -12,6 +12,7 @@ import { ExpenseModule } from './modules/expense/expense.module';
 import { ContractModule } from './modules/contract/contract.module';
 import { DataProviderModule } from './modules/data-provider/data-provider.module';
 import { AnalysisModule } from './modules/analysis/analysis.module';
+import { OperationModule } from './modules/service-order/operation.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AnalysisModule } from './modules/analysis/analysis.module';
     ExpenseModule,
     ContractModule,
     AnalysisModule,
+    OperationModule,
   ],
 })
 export class AppModule {}

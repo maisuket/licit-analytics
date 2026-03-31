@@ -13,6 +13,12 @@ enum TipoDespesa {
   PAGAMENTO
 }
 
+enum OsStatus {
+  AGUARDANDO
+  FATURADO
+  PAGO
+}
+
 model Company {
   id        String     @id @default(uuid())
   cnpj      String     @unique @db.VarChar(14)
@@ -24,19 +30,34 @@ model Company {
 }
 
 model Expense {
-  id              String      @id @default(uuid())
+  id              String         @id @default(uuid())
   companyId       String
-  orgao           String
-  orgaoSuperior   String?     @db.VarChar(255) // NOVO: Ex: Ministério da Defesa
-  unidadeGestora  String?     @db.VarChar(255) // NOVO: Ex: Centro de Intendência...
-  tipo            TipoDespesa
-  valor           Decimal     @db.Decimal(15, 2)
+  numeroDocumento String         // Ex: 2026NE0000503
+  orgao           String         // Ex: SEDUC
+  
+  // --- Restaurando os Campos da API Pública ---
+  orgaoSuperior   String?        @db.VarChar(255)
+  unidadeGestora  String?        @db.VarChar(255)
+  tipo            TipoDespesa    @default(EMPENHO)
+  descricao       String         @db.Text
+  numeroProcesso  String?        @db.VarChar(100)
+  elementoDespesa String?        @db.VarChar(255)
+  
+  // O valor público agora é mapeado para "valorOriginal" (Teto do Empenho)
+  valorOriginal   Decimal        @db.Decimal(15, 2) 
+  
+  // --- Campos do ERP Interno ---
+  recurso         String?        // Ex: CAPITAL, INTERIOR
+  competencia     String?        // Ex: JANEIRO/MARÇO
+  valorFaturado   Decimal        @default(0) @db.Decimal(15, 2)
+  saldo           Decimal        @default(0) @db.Decimal(15, 2)
+  
   data            DateTime
-  descricao       String      @db.Text
-  numeroDocumento String
-  numeroProcesso  String?     @db.VarChar(100) // NOVO: Número do processo licitatório
-  elementoDespesa String?     @db.VarChar(255) // NOVO: Categoria do gasto
-  company         Company     @relation(fields: [companyId], references: [id])
+  createdAt       DateTime       @default(now()) // Restaura funcionalidade do painel
+  
+  // Relacionamentos
+  company         Company        @relation(fields: [companyId], references: [id])
+  ordensServico   ServiceOrder[] // Um empenho paga várias O.S.
 
   @@map("expenses")
 }
@@ -58,4 +79,33 @@ model Contract {
   company            Company   @relation(fields: [companyId], references: [id])
 
   @@map("contracts")
+}
+
+model ServiceOrder {
+  id            String    @id @default(uuid())
+  expenseId     String    // Vinculado à Nota de Empenho
+  numeroOS      String    @db.VarChar(50)  // Ex: 022/2026
+  unidade       String    @db.VarChar(255) // Ex: EE ADELAIDE TAVARES
+  dataExecucao  DateTime
+  quantidade    Int       // Ex: 44 (máquinas)
+  descricao     String?   @db.Text         // Ex: CAPITAL, CDE 03
+  executante    String?   @db.VarChar(100) // Ex: THERMAL
+  
+  // Financeiro da O.S.
+  custo         Decimal   @db.Decimal(15, 2) // O que custou à empresa
+  valorFinal    Decimal   @db.Decimal(15, 2) // O que será cobrado (Vf)
+  margem        Decimal   @db.Decimal(5, 4)  // Margem de lucro (Ex: 0.0961)
+  
+  // Controle de Status
+  status        OsStatus  @default(AGUARDANDO) // Enum
+  competencia   String?   @db.VarChar(50)    // Ex: JANEIRO
+  numeroNF      String?   @db.VarChar(100)   // Nota Fiscal (se já faturado)
+  
+  // Relacionamentos
+  expense       Expense   @relation(fields: [expenseId], references: [id])
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("service_orders")
 }

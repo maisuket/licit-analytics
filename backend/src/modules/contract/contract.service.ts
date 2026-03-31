@@ -2,6 +2,7 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
 import { CompanyService } from '../company/company.service';
 import { DATA_PROVIDER_TOKEN } from '../data-provider/interfaces/data-provider.interface';
+import { QueryContractDto } from './dto/query-contract.dto';
 
 @Injectable()
 export class ContractService {
@@ -85,12 +86,43 @@ export class ContractService {
     return { count: contractsToCreate.length };
   }
 
-  async findByCompanyCnpj(cnpj: string) {
+  async findByCompanyCnpj(cnpj: string, query: QueryContractDto) {
     const company = await this.companyService.findByCnpj(cnpj);
 
-    return this.prisma.contract.findMany({
-      where: { companyId: company.id },
-      orderBy: { valorFinal: 'desc' },
-    });
+    // 1. Extração da paginação com valores padrão seguros
+    const { page = 1, limit = 10, search } = query;
+    const skip = (page - 1) * limit;
+
+    // 2. Construção da cláusula de filtro (garantindo que pertence à empresa alvo)
+    const where: any = { companyId: company.id };
+
+    if (search) {
+      where.OR = [
+        { numero: { contains: search, mode: 'insensitive' } },
+        { objeto: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // 3. Transação paralela para contar o total e buscar os registos paginados
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.contract.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { valorFinal: 'desc' }, // Trazemos sempre os contratos de maior valor primeiro
+      }),
+      this.prisma.contract.count({ where }),
+    ]);
+
+    // 4. Retorno no formato padronizado
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 }

@@ -4,6 +4,7 @@ import {
   Get,
   Body,
   Param,
+  Query,
   HttpStatus,
   HttpCode,
 } from '@nestjs/common';
@@ -11,17 +12,18 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { ExpenseService } from './expense.service';
 import { SpendingQueue } from './queues/spending.queue';
 import { ImportExpenseDto } from './dto/import-expense.dto';
+import { QueryExpenseDto } from './dto/query-expense.dto';
 
 @ApiTags('Expenses')
 @Controller('expense')
 export class ExpenseController {
   constructor(
     private readonly expenseService: ExpenseService,
-    private readonly spendingQueue: SpendingQueue, // Injetando a Fila para processamento assíncrono
+    private readonly spendingQueue: SpendingQueue,
   ) {}
 
   @Post('import')
-  @HttpCode(HttpStatus.ACCEPTED) // <- GARANTE QUE O RETORNO REAL É 202 ACCEPTED
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary:
       'Importa e processa despesas de uma fonte pública de forma assíncrona',
@@ -35,7 +37,6 @@ export class ExpenseController {
     description: 'Requisição inválida.',
   })
   async importExpenses(@Body() importExpenseDto: ImportExpenseDto) {
-    // No Passo 9, mudamos para processamento em background via BullMQ
     const jobId = await this.spendingQueue.addImportJob(importExpenseDto);
 
     return {
@@ -45,15 +46,20 @@ export class ExpenseController {
   }
 
   @Get(':cnpj')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Lista todas as despesas processadas de uma empresa',
+    summary:
+      'Lista as despesas/empenhos de uma empresa com paginação e pesquisa',
   })
   @ApiParam({ name: 'cnpj', description: 'CNPJ com 14 dígitos numéricos' })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Lista de despesas devolvida com sucesso.',
+    description: 'Lista paginada de despesas devolvida com sucesso.',
   })
-  async findCompanyExpenses(@Param('cnpj') cnpj: string) {
-    return this.expenseService.findByCompanyCnpj(cnpj);
+  async findCompanyExpenses(
+    @Param('cnpj') cnpj: string,
+    @Query() query: QueryExpenseDto,
+  ) {
+    return this.expenseService.findByCompanyCnpj(cnpj, query);
   }
 }

@@ -5,6 +5,7 @@ import { CompanyService } from '../company/company.service';
 import { DATA_PROVIDER_TOKEN } from '../data-provider/interfaces/data-provider.interface';
 import type { IDataProvider } from '../data-provider/interfaces/data-provider.interface';
 import { ImportExpenseDto } from './dto/import-expense.dto';
+import { QueryExpenseDto } from './dto/query-expense.dto';
 
 @Injectable()
 export class ExpenseService {
@@ -30,19 +31,18 @@ export class ExpenseService {
 
     if (!rawExpenses || rawExpenses.length === 0) return { count: 0 };
 
-    // CORREÇÃO: Adicionando os campos enriquecidos que vêm do TransparencyApiProvider
     const expensesToCreate = rawExpenses.map((raw) => ({
       companyId: company.id,
       orgao: raw.orgao,
-      orgaoSuperior: raw.orgaoSuperior, // <- Adicionado
-      unidadeGestora: raw.unidadeGestora, // <- Adicionado
+      orgaoSuperior: raw.orgaoSuperior,
+      unidadeGestora: raw.unidadeGestora,
       tipo: raw.tipo,
-      valor: raw.valor,
+      valorOriginal: raw.valor,
       data: raw.data,
       descricao: raw.descricao,
       numeroDocumento: raw.numeroDocumento,
-      numeroProcesso: raw.numeroProcesso, // <- Adicionado
-      elementoDespesa: raw.elementoDespesa, // <- Adicionado
+      numeroProcesso: raw.numeroProcesso,
+      elementoDespesa: raw.elementoDespesa,
     }));
 
     const result = await this.prisma.expense.createMany({
@@ -50,16 +50,47 @@ export class ExpenseService {
       skipDuplicates: true,
     });
 
-    // Como importámos novos dados, limpamos o cache do dashboard para esta empresa
-    // para que o frontend busque dados frescos na próxima requisição!
     return { count: result.count };
   }
 
-  async findByCompanyCnpj(cnpj: string) {
+  async findByCompanyCnpj(cnpj: string, query: QueryExpenseDto) {
     const company = await this.companyService.findByCnpj(cnpj);
-    return this.prisma.expense.findMany({
-      where: { companyId: company.id },
-      orderBy: { data: 'desc' },
-    });
+
+    // 1. Configuração da Paginação
+    const { page = 1, limit = 10, search } = query;
+    const skip = (page - 1) * limit;
+
+    // 2. Construção dinâmica dos filtros
+    const where: any = { companyId: company.id };
+
+    if (search) {
+      where.OR = [
+        { numeroDocumento: { contains: search, mode: 'insensitive' } },
+        { orgao: { contains: search, mode: 'insensitive' } },
+        { descricao: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // 3. Execução paralela para alta performance
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.expense.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { data: 'desc' }, // Despesas mais recentes primeiro
+      }),
+      this.prisma.expense.count({ where }),
+    ]);
+
+    // 4. Retorno formatado
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 }

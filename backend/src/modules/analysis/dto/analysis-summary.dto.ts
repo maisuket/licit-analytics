@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-class TopOrgaoDto {
+export class TopOrgaoDto {
   @ApiProperty({ example: 'MINISTÉRIO DA SAÚDE' })
   orgao: string;
 
@@ -12,30 +12,34 @@ export class AnalysisSummaryDto {
   @ApiProperty({ example: '23008295000148' })
   cnpj: string;
 
-  @ApiProperty({ example: 500000.0, description: 'Soma de todos os empenhos' })
+  @ApiProperty({
+    example: 500000.0,
+    description: 'Soma de todos os empenhos (Tetos)',
+  })
   totalEmpenhado: number;
 
   @ApiProperty({
     example: 450000.0,
-    description: 'Soma de todas as liquidações',
+    description: 'Soma de todas as liquidações realizadas pelo governo',
   })
   totalLiquidado: number;
 
   @ApiProperty({
     example: 400000.0,
-    description: 'Soma de todos os pagamentos realizados',
+    description: 'Soma de todos os pagamentos já transferidos',
   })
   totalPago: number;
 
   @ApiProperty({
     example: 100000.0,
-    description: 'Diferença entre Empenhado e Pago',
+    description: 'Diferença entre o Teto Empenhado e o Valor Pago',
   })
   saldoAPagar: number;
 
   @ApiProperty({
     type: [TopOrgaoDto],
-    description: 'Ranking dos 5 órgãos que mais empenharam valores',
+    description:
+      'Ranking dos 5 órgãos que mais empenharam valores para este CNPJ',
   })
   topOrgaos: TopOrgaoDto[];
 }
