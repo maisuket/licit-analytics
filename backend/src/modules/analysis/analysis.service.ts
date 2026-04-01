@@ -1,9 +1,13 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
 import { CompanyService } from '../company/company.service';
 import { DashboardResponseDto } from './dto/dashboard-response.dto';
 import { AnalysisSummaryDto } from './dto/analysis-summary.dto';
 import { TipoDespesa, Expense, Contract } from '@prisma/client';
+import * as crypto from 'crypto'; // Usado para gerar IDs temporários para o frontend
+// ATENÇÃO: Ajuste o caminho abaixo conforme sua estrutura
+import { DATA_PROVIDER_TOKEN } from '../data-provider/interfaces/data-provider.interface';
+import type { IDataProvider } from '../data-provider/interfaces/data-provider.interface';
 
 @Injectable()
 export class AnalysisService {
@@ -12,6 +16,8 @@ export class AnalysisService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly companyService: CompanyService,
+    @Inject(DATA_PROVIDER_TOKEN)
+    private readonly dataProvider: IDataProvider, // Injeção do provider da Transparência
   ) {}
 
   async getCompanySummary(cnpj: string): Promise<AnalysisSummaryDto> {
@@ -41,7 +47,7 @@ export class AnalysisService {
       where: { companyId: company.id, tipo: TipoDespesa.EMPENHO },
       _sum: { valorOriginal: true },
       orderBy: { _sum: { valorOriginal: 'desc' } },
-      take: 5, // Traz apenas o Top 5 órgãos que mais dão receita
+      take: 5,
     });
 
     const topOrgaos = topOrgaosData.map((item) => ({
@@ -66,14 +72,17 @@ export class AnalysisService {
 
     let company;
     try {
+      // 1. Tenta buscar no banco local
       company = await this.companyService.findByCnpj(cnpj);
     } catch (error) {
-      throw new NotFoundException(
-        'Empresa não encontrada ou ainda não importada.',
+      // 2. FALLBACK: Se não achar, busca direto na API da transparência!
+      this.logger.warn(
+        `Empresa não encontrada no Postgre. Acionando Fallback da API para CNPJ: ${cnpj}`,
       );
+      return this.getDashboardDataFromPortal(cnpj);
     }
 
-    // Busca paralela para otimizar tempo de resposta
+    // Busca paralela para otimizar tempo de resposta (Banco Local)
     const [empenhos, contratos] = await Promise.all([
       this.prisma.expense.findMany({
         where: { companyId: company.id, tipo: TipoDespesa.EMPENHO },
@@ -91,7 +100,6 @@ export class AnalysisService {
     );
     const empenhosAtivos = empenhos.length;
 
-    // Obtém a data mais recente de criação de forma otimizada
     const ultimaAtualizacao =
       empenhos.length > 0
         ? new Date(Math.max(...empenhos.map((e) => e.createdAt.getTime())))
@@ -109,6 +117,82 @@ export class AnalysisService {
         totalEmpenhado: `R$ ${this.formatCurrency(totalEmpenhadoNum)}`,
         empenhosAtivos: empenhosAtivos.toString().padStart(2, '0'),
         ultimaAtualizacao: this.formatDateTime(ultimaAtualizacao),
+      },
+      empenhos: dashboardEmpenhos,
+      contratos: dashboardContratos,
+    };
+  }
+
+  // ========================================================================
+  // FALLBACK API (Busca em Tempo Real no Portal da Transparência)
+  // ========================================================================
+
+  private async getDashboardDataFromPortal(
+    cnpj: string,
+  ): Promise<DashboardResponseDto> {
+    const year = new Date().getFullYear();
+
+    // Fazemos apenas 1 requisição da primeira página para retornar rápido ao frontend.
+    // O ideal posteriormente é criar um job de importação para salvar tudo no Postgres.
+    const [rawExpenses, rawContracts] = await Promise.all([
+      this.dataProvider.fetchExpensesByCnpjAndYear(cnpj, year, 1),
+      this.dataProvider.fetchContractsByCnpj(cnpj, 1),
+    ]);
+
+    const empenhosApi = rawExpenses.filter(
+      (e) => e.tipo === TipoDespesa.EMPENHO,
+    );
+
+    const totalEmpenhadoNum = empenhosApi.reduce(
+      (acc, curr) => acc + Number(curr.valor),
+      0,
+    );
+
+    const dashboardEmpenhos = empenhosApi.map((emp) => ({
+      id: emp.numeroDocumento || crypto.randomUUID(),
+      numeroEmpenho: emp.numeroDocumento,
+      dataEmissao: this.formatDate(emp.data),
+      valorOriginal: this.formatCurrency(Number(emp.valor)),
+      processo: emp.numeroProcesso ?? null,
+      elemento: emp.elementoDespesa ?? null,
+      observacao: emp.descricao ?? null,
+      favorecido: {
+        nome: 'Razão Social Indisponível (Busca via API)', // API não retorna o nome diretamente nesta rota
+        cnpjFormatado: this.formatCnpj(cnpj),
+      },
+      unidadeGestora: {
+        nome: emp.unidadeGestora || emp.orgao,
+        orgaoSuperior: emp.orgaoSuperior ?? null,
+      },
+    }));
+
+    const dashboardContratos = rawContracts.map((c) => {
+      const vigenciaInicio = c.dataInicioVigencia
+        ? this.formatDate(c.dataInicioVigencia)
+        : '?';
+      const vigenciaFim = c.dataFimVigencia
+        ? this.formatDate(c.dataFimVigencia)
+        : '?';
+
+      return {
+        id: c.numero || crypto.randomUUID(),
+        numero: c.numero,
+        objeto: c.objeto,
+        dataAssinatura: c.dataAssinatura
+          ? this.formatDate(c.dataAssinatura)
+          : 'N/A',
+        vigencia: `${vigenciaInicio} até ${vigenciaFim}`,
+        valorFinal: this.formatCurrency(Number(c.valorFinal)),
+        situacao: c.situacao,
+        orgao: c.unidadeGestora || 'Órgão não especificado',
+      };
+    });
+
+    return {
+      stats: {
+        totalEmpenhado: `R$ ${this.formatCurrency(totalEmpenhadoNum)}`,
+        empenhosAtivos: empenhosApi.length.toString().padStart(2, '0'),
+        ultimaAtualizacao: this.formatDateTime(new Date()) + ' (API Gov)',
       },
       empenhos: dashboardEmpenhos,
       contratos: dashboardContratos,

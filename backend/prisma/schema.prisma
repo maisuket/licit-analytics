@@ -25,6 +25,8 @@ model Company {
   name      String
   expenses  Expense[]
   contracts Contract[]
+  grants     Grant[]    // Convênios
+  amendments Amendment[] // Emendas
   
   @@map("companies")
 }
@@ -108,4 +110,24 @@ model ServiceOrder {
   updatedAt     DateTime  @updatedAt
 
   @@map("service_orders")
+}
+
+model Amendment {
+  id         String   @id @default(uuid())
+  externalId String   @unique
+  companyId  String
+  author     String   // Parlamentar
+  year       Int
+  value      Decimal  @db.Decimal(18, 2)
+  company    Company  @relation(fields: [companyId], references: [id])
+}
+
+model Grant {
+  id          String   @id @default(uuid())
+  externalId  String   @unique // Número do convênio
+  companyId   String
+  object      String   @db.Text
+  valueGlobal Decimal  @db.Decimal(18, 2)
+  status      String
+  company     Company  @relation(fields: [companyId], references: [id])
 }
