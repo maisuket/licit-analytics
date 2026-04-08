@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
 enum TipoDespesa {
   EMPENHO
   LIQUIDACAO
@@ -19,52 +23,81 @@ enum OsStatus {
   PAGO
 }
 
+enum UserRole {
+  ADMIN
+  OPERATOR
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+/// Usuários internos do sistema (autenticação JWT)
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique @db.VarChar(255)
+  password  String    // bcrypt hash — NUNCA retornar ao client
+  name      String    @db.VarChar(255)
+  role      UserRole  @default(OPERATOR)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft delete
+
+  @@index([email])
+  @@map("users")
+}
+
 model Company {
-  id        String     @id @default(uuid())
-  cnpj      String     @unique @db.VarChar(14)
+  id        String      @id @default(uuid())
+  cnpj      String      @unique @db.VarChar(14)
   name      String
   expenses  Expense[]
   contracts Contract[]
-  grants     Grant[]    // Convênios
-  amendments Amendment[] // Emendas
-  
+  grants    Grant[]
+  amendments Amendment[]
+  deletedAt DateTime?   // Soft delete
+
   @@map("companies")
 }
 
 model Expense {
-  id              String         @id @default(uuid())
+  id              String      @id @default(uuid())
   companyId       String
-  numeroDocumento String         // Ex: 2026NE0000503
-  orgao           String         // Ex: SEDUC
+  numeroDocumento String      // Ex: 2026NE0000503
+  orgao           String      // Ex: SEDUC
 
   // --- Campos da API Pública ---
-  orgaoSuperior   String?        @db.VarChar(255)
-  unidadeGestora  String?        @db.VarChar(255)
-  tipo            TipoDespesa    @default(EMPENHO)
-  descricao       String         @db.Text
-  numeroProcesso  String?        @db.VarChar(100)
-  elementoDespesa String?        @db.VarChar(255)
+  orgaoSuperior   String?     @db.VarChar(255)
+  unidadeGestora  String?     @db.VarChar(255)
+  tipo            TipoDespesa @default(EMPENHO)
+  descricao       String      @db.Text
+  numeroProcesso  String?     @db.VarChar(100)
+  elementoDespesa String?     @db.VarChar(255)
 
   // Valor público mapeado para "valorOriginal" (Teto do Empenho)
-  valorOriginal   Decimal        @db.Decimal(15, 2)
+  valorOriginal   Decimal     @db.Decimal(15, 2)
 
   // --- Campos do ERP Interno ---
-  recurso         String?        // Ex: CAPITAL, INTERIOR
-  competencia     String?        // Ex: JANEIRO/MARÇO
-  valorFaturado   Decimal        @default(0) @db.Decimal(15, 2)
-  saldo           Decimal        @default(0) @db.Decimal(15, 2)
+  recurso         String?     // Ex: CAPITAL, INTERIOR
+  competencia     String?     // Ex: JANEIRO/MARÇO
+  valorFaturado   Decimal     @default(0) @db.Decimal(15, 2)
+  saldo           Decimal     @default(0) @db.Decimal(15, 2)
 
   data            DateTime
-  createdAt       DateTime       @default(now())
+  createdAt       DateTime    @default(now())
+  deletedAt       DateTime?   // Soft delete
 
-  // Vínculo com Contrato (correlacionado via numeroProcesso ou importação)
-  contractId      String?
-  contract        Contract?      @relation(fields: [contractId], references: [id])
+  // Vínculo com Contrato (correlacionado automaticamente)
+  contractId          String?
+  correlationScore    Float?   // 0.0 – 1.0, score da estratégia usada
+  correlationStrategy String?  // 'exact_process' | 'substring' | 'fuzzy'
+  contract            Contract? @relation(fields: [contractId], references: [id])
 
   // Relacionamentos
-  company         Company        @relation(fields: [companyId], references: [id])
-  ordensServico   ServiceOrder[]
+  company       Company        @relation(fields: [companyId], references: [id])
+  ordensServico ServiceOrder[]
 
+  @@unique([companyId, numeroDocumento, tipo]) // Garante skipDuplicates no createMany
   @@index([contractId])
   @@index([companyId, tipo])
   @@index([numeroProcesso])
@@ -84,64 +117,68 @@ model Contract {
   situacao           String    @db.VarChar(100)
   unidadeGestora     String    @db.VarChar(255)
   orgaoSuperior      String?   @db.VarChar(255)
+  deletedAt          DateTime? // Soft delete
 
-  company            Company   @relation(fields: [companyId], references: [id])
-  expenses           Expense[] // Empenhos, liquidações e pagamentos vinculados
+  company  Company   @relation(fields: [companyId], references: [id])
+  expenses Expense[]
 
   @@index([companyId])
   @@map("contracts")
 }
 
 model ServiceOrder {
-  id            String    @id @default(uuid())
-  expenseId     String    // Vinculado à Nota de Empenho
-  numeroOS      String    @db.VarChar(50)  // Ex: 022/2026
-  unidade       String    @db.VarChar(255) // Ex: EE ADELAIDE TAVARES
-  dataExecucao  DateTime
-  quantidade    Int       // Ex: 44 (máquinas)
-  descricao     String?   @db.Text         // Ex: CAPITAL, CDE 03
-  executante    String?   @db.VarChar(100) // Ex: THERMAL
-  
+  id           String   @id @default(uuid())
+  expenseId    String   // Vinculado à Nota de Empenho
+  numeroOS     String   @db.VarChar(50)  // Ex: 022/2026
+  unidade      String   @db.VarChar(255) // Ex: EE ADELAIDE TAVARES
+  dataExecucao DateTime
+  quantidade   Int      // Ex: 44 (máquinas)
+  descricao    String?  @db.Text
+  executante   String?  @db.VarChar(100)
+
   // Financeiro da O.S.
-  custo         Decimal   @db.Decimal(15, 2) // O que custou à empresa
-  valorFinal    Decimal   @db.Decimal(15, 2) // O que será cobrado (Vf)
-  margem        Decimal   @db.Decimal(5, 4)  // Margem de lucro (Ex: 0.0961)
-  
+  custo      Decimal @db.Decimal(15, 2)
+  valorFinal Decimal @db.Decimal(15, 2)
+  margem     Decimal @db.Decimal(5, 4)
+
   // Controle de Status
-  status        OsStatus  @default(AGUARDANDO) // Enum
-  competencia   String?   @db.VarChar(50)    // Ex: JANEIRO
-  numeroNF      String?   @db.VarChar(100)   // Nota Fiscal (se já faturado)
-  
+  status      OsStatus @default(AGUARDANDO)
+  competencia String?  @db.VarChar(50)
+  numeroNF    String?  @db.VarChar(100)
+
   // Relacionamentos
-  expense       Expense   @relation(fields: [expenseId], references: [id])
-  
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  expense Expense @relation(fields: [expenseId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft delete
 
   @@map("service_orders")
 }
 
 model Amendment {
-  id         String   @id @default(uuid())
-  externalId String   @unique
+  id         String    @id @default(uuid())
+  externalId String    @unique
   companyId  String
-  author     String   // Parlamentar
+  author     String
   year       Int
-  value      Decimal  @db.Decimal(18, 2)
-  company    Company  @relation(fields: [companyId], references: [id])
+  value      Decimal   @db.Decimal(18, 2)
+  deletedAt  DateTime? // Soft delete
+  company    Company   @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
   @@map("amendments")
 }
 
 model Grant {
-  id          String   @id @default(uuid())
-  externalId  String   @unique // Número do convênio
+  id          String    @id @default(uuid())
+  externalId  String    @unique
   companyId   String
-  object      String   @db.Text
-  valueGlobal Decimal  @db.Decimal(18, 2)
+  object      String    @db.Text
+  valueGlobal Decimal   @db.Decimal(18, 2)
   status      String
-  company     Company  @relation(fields: [companyId], references: [id])
+  deletedAt   DateTime? // Soft delete
+  company     Company   @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
   @@map("grants")

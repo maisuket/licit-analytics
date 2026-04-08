@@ -3,10 +3,6 @@ import { Contract, Expense } from '@prisma/client';
 import { PrismaService } from '../../../shared/infra/database/prisma.service';
 import { SimilarityUtil } from '../../../shared/utils/similarity.util';
 
-/**
- * Estratégias de correlação, em ordem de confiabilidade.
- * Quanto mais alto o score, mais confiante é o vínculo.
- */
 export enum CorrelationStrategy {
   EXACT_PROCESS = 'exact_process',   // numeroProcesso contém o número do contrato → score 1.0
   SUBSTRING     = 'substring',       // número do contrato aparece na descrição → score 0.85
@@ -20,8 +16,8 @@ export interface CorrelationResult {
   score: number;
 }
 
-// Threshold mínimo para aceitar correlação fuzzy (0–1)
 const FUZZY_THRESHOLD = 0.75;
+const UPDATE_BATCH_SIZE = 50; // Evita transações enormes que causam timeout em datasets grandes
 
 @Injectable()
 export class CorrelationService {
@@ -34,7 +30,7 @@ export class CorrelationService {
    * 1. Busca todos os contratos da empresa
    * 2. Busca todos os empenhos sem contractId
    * 3. Tenta correlacionar via 3 estratégias (Exact → Substring → Fuzzy)
-   * 4. Persiste os vínculos encontrados no banco
+   * 4. Persiste em batches de 50 para não saturar o Postgres
    *
    * @returns Resumo com total de vínculos criados por estratégia
    */
@@ -45,9 +41,9 @@ export class CorrelationService {
     this.logger.log(`Iniciando correlação para empresa: ${companyId}`);
 
     const [contracts, expenses] = await Promise.all([
-      this.prisma.contract.findMany({ where: { companyId } }),
+      this.prisma.contract.findMany({ where: { companyId, deletedAt: null } }),
       this.prisma.expense.findMany({
-        where: { companyId, contractId: null },
+        where: { companyId, contractId: null, deletedAt: null },
         select: {
           id: true,
           numeroDocumento: true,
@@ -81,15 +77,8 @@ export class CorrelationService {
       return { total: 0, byStrategy: this.emptyByStrategy() };
     }
 
-    // Persistência em batch — evita N queries individuais
-    await this.prisma.$transaction(
-      results.map((r) =>
-        this.prisma.expense.update({
-          where: { id: r.expenseId },
-          data: { contractId: r.contractId },
-        }),
-      ),
-    );
+    // Persistência em batches — evita transações enormes (N pode ser centenas)
+    await this.persistInBatches(results);
 
     const byStrategy = this.emptyByStrategy();
     for (const r of results) byStrategy[r.strategy]++;
@@ -105,14 +94,37 @@ export class CorrelationService {
   }
 
   /**
-   * Tenta encontrar o melhor contrato para um empenho usando as 3 estratégias.
-   * Retorna o primeiro match encontrado (do mais confiável ao menos confiável).
+   * Persiste os vínculos em chunks de UPDATE_BATCH_SIZE para não saturar o Postgres.
+   * Salva também o score e a estratégia para auditoria futura.
    */
+  private async persistInBatches(results: CorrelationResult[]): Promise<void> {
+    for (let i = 0; i < results.length; i += UPDATE_BATCH_SIZE) {
+      const batch = results.slice(i, i + UPDATE_BATCH_SIZE);
+
+      await this.prisma.$transaction(
+        batch.map((r) =>
+          this.prisma.expense.update({
+            where: { id: r.expenseId },
+            data: {
+              contractId: r.contractId,
+              correlationScore: r.score,
+              correlationStrategy: r.strategy,
+            },
+          }),
+        ),
+      );
+
+      this.logger.debug(
+        `Batch ${Math.ceil((i + 1) / UPDATE_BATCH_SIZE)}: ${batch.length} vínculos persistidos`,
+      );
+    }
+  }
+
   private findBestMatch(
     expense: Pick<Expense, 'id' | 'numeroDocumento' | 'numeroProcesso' | 'descricao'>,
     contracts: Contract[],
   ): CorrelationResult | null {
-    // --- Estratégia 1: Exact match via numeroProcesso ---
+    // Estratégia 1: Exact match via numeroProcesso
     if (expense.numeroProcesso) {
       const normalizedProcess = this.normalizeContractNumber(expense.numeroProcesso);
 
@@ -133,7 +145,7 @@ export class CorrelationService {
       }
     }
 
-    // --- Estratégia 2: Substring match na descrição ---
+    // Estratégia 2: Substring match na descrição
     if (expense.descricao) {
       const descUpper = expense.descricao.toUpperCase();
 
@@ -141,10 +153,7 @@ export class CorrelationService {
         const contratoNumNormalized = this.normalizeContractNumber(contract.numero).toUpperCase();
         const contratoNum = contract.numero.replace(/\s/g, '').toUpperCase();
 
-        if (
-          descUpper.includes(contratoNumNormalized) ||
-          descUpper.includes(contratoNum)
-        ) {
+        if (descUpper.includes(contratoNumNormalized) || descUpper.includes(contratoNum)) {
           return {
             expenseId: expense.id,
             contractId: contract.id,
@@ -155,16 +164,13 @@ export class CorrelationService {
       }
     }
 
-    // --- Estratégia 3: Fuzzy match pelo objeto do contrato vs descrição ---
+    // Estratégia 3: Fuzzy match pelo objeto do contrato vs descrição
     if (expense.descricao) {
       let bestScore = FUZZY_THRESHOLD;
       let bestContract: Contract | null = null;
 
       for (const contract of contracts) {
-        const score = SimilarityUtil.calculate(
-          expense.descricao,
-          contract.objeto,
-        );
+        const score = SimilarityUtil.calculate(expense.descricao, contract.objeto);
 
         if (score > bestScore) {
           bestScore = score;
@@ -185,10 +191,6 @@ export class CorrelationService {
     return null;
   }
 
-  /**
-   * Normaliza número de contrato removendo formatação e espaços.
-   * Ex: "057/2022" → "0572022" | "CONT-057/2022" → "CONT0572022"
-   */
   private normalizeContractNumber(value: string): string {
     return value.replace(/[\s\-\/\.]/g, '').toUpperCase();
   }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ApiService } from "../services/api";
 import { DashboardResponse } from "../types/dashboard";
+import { isValidCnpj, maskCnpj } from "../utils/validators";
 
 interface UseDashboardReturn {
   cnpj: string;
@@ -25,28 +26,14 @@ export function useDashboard(): UseDashboardReturn {
   const [error, setError] = useState<string | null>(null);
   const [needsImport, setNeedsImport] = useState(false);
 
-  // MÁSCARA DE CNPJ: Formata automaticamente enquanto o utilizador digita
   const handleCnpjChange = (value: string) => {
-    let formatted = value.replace(/\D/g, ""); // Remove tudo o que não é número
-    if (formatted.length > 14) formatted = formatted.slice(0, 14); // Limita a 14 dígitos
-
-    // Aplica a formatação 00.000.000/0000-00
-    if (formatted.length > 2)
-      formatted = formatted.replace(/^(\d{2})(\d)/, "$1.$2");
-    if (formatted.length > 5)
-      formatted = formatted.replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3");
-    if (formatted.length > 8)
-      formatted = formatted.replace(/\.(\d{3})(\d)/, ".$1/$2");
-    if (formatted.length > 12)
-      formatted = formatted.replace(/(\d{4})(\d)/, "$1-$2");
-
-    setCnpj(formatted);
+    setCnpj(maskCnpj(value));
   };
 
   const handleSearch = async () => {
     const cleanCnpj = cnpj.replace(/\D/g, "");
-    if (cleanCnpj.length !== 14) {
-      setError("Por favor, insira um CNPJ válido com 14 dígitos.");
+    if (!isValidCnpj(cleanCnpj)) {
+      setError("CNPJ inválido. Verifique os dígitos e tente novamente.");
       setNeedsImport(false);
       return;
     }
