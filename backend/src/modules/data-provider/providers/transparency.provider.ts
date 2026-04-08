@@ -53,10 +53,12 @@ export class TransparencyApiProvider implements IDataProvider {
       const data: unknown = response.data;
       if (!Array.isArray(data)) return [];
 
+      // Mapeamento usa `|| undefined` porque RawExpenseData define campos opcionais como
+      // `string | undefined`, não `string | null` (padrão TypeScript sem DB null)
       return (data as Record<string, unknown>[]).map((item) => ({
         orgao: (item['orgao'] as string) || 'ÓRGÃO NÃO IDENTIFICADO',
-        orgaoSuperior: (item['orgaoSuperior'] as string | null) || null,
-        unidadeGestora: (item['ug'] as string | null) || null,
+        orgaoSuperior: (item['orgaoSuperior'] as string | undefined) || undefined,
+        unidadeGestora: (item['ug'] as string | undefined) || undefined,
         tipo: DESPESA_FASE_MAP[fase],
         valor: this.parseGovernmentValue(item['valor'] as string | number | undefined),
         data: this.parseGovernmentDate(item['data'] as string | undefined),
@@ -65,8 +67,8 @@ export class TransparencyApiProvider implements IDataProvider {
           (item['documentoResumido'] as string) ||
           (item['documento'] as string) ||
           'S/N',
-        numeroProcesso: (item['numeroProcesso'] as string | null) || null,
-        elementoDespesa: (item['elemento'] as string | null) || null,
+        numeroProcesso: (item['numeroProcesso'] as string | undefined) || undefined,
+        elementoDespesa: (item['elemento'] as string | undefined) || undefined,
       }));
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);

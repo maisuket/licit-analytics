@@ -51,14 +51,6 @@ export class ExpenseProcessor extends WorkerHost {
     };
   }
 
-  // Chamado quando o job falha (após esgotar as retentativas)
-  override async onFailed(
-    job: Job<ImportExpenseDto, ProcessResult, string>,
-    error: Error,
-  ): Promise<void> {
-    this.logger.error(
-      `[Job ${job.id}] Falha definitiva após ${job.attemptsMade} tentativa(s): ${error.message}`,
-      error.stack,
-    );
-  }
+  // `onFailed` não existe no WorkerHost base — usa o event listener do BullMQ diretamente.
+  // Para capturar falhas definitivas, registre um listener no módulo ou use QueueEventsListener.
 }

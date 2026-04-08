@@ -4,9 +4,10 @@ import { PrismaService } from '../../shared/infra/database/prisma.service';
 import { CompanyService } from '../company/company.service';
 import {
   DATA_PROVIDER_TOKEN,
-  IDataProvider,
   RawContractData,
 } from '../data-provider/interfaces/data-provider.interface';
+// `import type` necessário por causa de isolatedModules + emitDecoratorMetadata
+import type { IDataProvider } from '../data-provider/interfaces/data-provider.interface';
 import { QueryContractDto } from './dto/query-contract.dto';
 
 @Injectable()

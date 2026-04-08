@@ -16,11 +16,8 @@ import { DatabaseModule } from '../../shared/infra/database/prisma.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET'),
-        // signOptions.expiresIn é sobrescrito por AuthService.signToken()
-        // mas aqui serve como fallback de verificação
-        signOptions: {
-          expiresIn: config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
-        },
+        // expiresIn é gerenciado por-chamada em AuthService.signToken().
+        // Não definimos aqui para evitar conflito de tipos com StringValue do `ms`.
       }),
     }),
   ],

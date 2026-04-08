@@ -5,7 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
@@ -26,10 +26,6 @@ export class AuthService {
     private readonly config: ConfigService,
   ) {}
 
-  /**
-   * Cria um novo usuário interno. Apenas ADMINs podem chamar este método
-   * (a restrição é aplicada no Controller via @Roles).
-   */
   async register(dto: RegisterDto): Promise<AuthResponseDto> {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -52,13 +48,9 @@ export class AuthService {
     });
 
     this.logger.log(`Novo usuário registado: ${user.email} (${user.role})`);
-
     return { accessToken: this.signToken(user), user };
   }
 
-  /**
-   * Autentica um usuário e retorna um JWT de acesso.
-   */
   async login(dto: LoginDto): Promise<AuthResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email, deletedAt: null },
@@ -75,7 +67,6 @@ export class AuthService {
     }
 
     this.logger.log(`Login bem-sucedido: ${user.email}`);
-
     const safeUser = { id: user.id, email: user.email, name: user.name, role: user.role };
     return { accessToken: this.signToken(safeUser), user: safeUser };
   }
@@ -83,8 +74,11 @@ export class AuthService {
   private signToken(user: { id: string; email: string; role: string }): string {
     const payload: JwtPayload = { sub: user.id, email: user.email, role: user.role };
 
-    return this.jwtService.sign(payload, {
-      expiresIn: this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
-    });
+    // expiresIn usa cast para contornar o tipo `StringValue` do pacote `ms`
+    // — o valor vem do .env e é validado pelo Joi no boot.
+    const expiresIn = this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m');
+    const options: JwtSignOptions = { expiresIn: expiresIn as JwtSignOptions['expiresIn'] };
+
+    return this.jwtService.sign(payload, options);
   }
 }

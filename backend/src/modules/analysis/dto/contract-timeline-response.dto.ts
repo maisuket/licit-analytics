@@ -2,125 +2,122 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ExpenseTimelineItemDto {
   @ApiProperty({ example: 'uuid-123' })
-  id: string;
+  id!: string;
 
   @ApiProperty({ example: '2026NE0000503' })
-  numeroDocumento: string;
+  numeroDocumento!: string;
 
   @ApiProperty({ example: 'EMPENHO', enum: ['EMPENHO', 'LIQUIDACAO', 'PAGAMENTO'] })
-  tipo: string;
+  tipo!: string;
 
   @ApiProperty({ example: 'SEDUC' })
-  orgao: string;
+  orgao!: string;
 
   @ApiPropertyOptional({ example: 'MEC' })
-  orgaoSuperior: string | null;
+  orgaoSuperior!: string | null;
 
   @ApiPropertyOptional({ example: 'Fundo Nacional de Educação' })
-  unidadeGestora: string | null;
+  unidadeGestora!: string | null;
 
   @ApiProperty({ example: 45757.00 })
-  valorOriginal: number;
+  valorOriginal!: number;
 
   @ApiProperty({ example: '2026-01-15T00:00:00.000Z' })
-  data: Date;
+  data!: Date;
 
   @ApiPropertyOptional({ example: '01.01.028101.005520/2026-90' })
-  numeroProcesso: string | null;
+  numeroProcesso!: string | null;
 
   @ApiPropertyOptional({ example: '33.90.39' })
-  elementoDespesa: string | null;
+  elementoDespesa!: string | null;
 
   @ApiPropertyOptional({ example: 'Serviços de manutenção de equipamentos' })
-  descricao: string;
+  descricao!: string;
 }
 
 export class ContractTimelineFinancialSummaryDto {
   @ApiProperty({ example: 150000.00, description: 'Soma dos empenhos vinculados ao contrato' })
-  totalEmpenhado: number;
+  totalEmpenhado!: number;
 
   @ApiProperty({ example: 120000.00, description: 'Soma das liquidações' })
-  totalLiquidado: number;
+  totalLiquidado!: number;
 
   @ApiProperty({ example: 100000.00, description: 'Soma dos pagamentos' })
-  totalPago: number;
+  totalPago!: number;
 
   @ApiProperty({ example: 50000.00, description: 'Valor empenhado ainda não pago' })
-  saldoAReceber: number;
+  saldoAReceber!: number;
 
   @ApiProperty({ example: 0.67, description: 'Percentual já liquidado (0 a 1)' })
-  percentualLiquidado: number;
+  percentualLiquidado!: number;
 
   @ApiProperty({ example: 0.56, description: 'Percentual já pago (0 a 1)' })
-  percentualPago: number;
+  percentualPago!: number;
 }
 
 export class ContractTimelineItemDto {
   @ApiProperty({ example: 'uuid-contract-123' })
-  id: string;
+  id!: string;
 
   @ApiProperty({ example: '057/2022' })
-  numero: string;
+  numero!: string;
 
   @ApiProperty({ example: 'Prestação de serviços de manutenção de equipamentos' })
-  objeto: string;
+  objeto!: string;
 
   @ApiPropertyOptional({ example: '2022-03-01T00:00:00.000Z' })
-  dataAssinatura: Date | null;
+  dataAssinatura!: Date | null;
 
   @ApiPropertyOptional({ example: '2022-03-15T00:00:00.000Z' })
-  dataInicioVigencia: Date | null;
+  dataInicioVigencia!: Date | null;
 
   @ApiPropertyOptional({ example: '2023-03-14T00:00:00.000Z' })
-  dataFimVigencia: Date | null;
+  dataFimVigencia!: Date | null;
 
   @ApiProperty({ example: 200000.00 })
-  valorInicial: number;
+  valorInicial!: number;
 
   @ApiProperty({ example: 250000.00 })
-  valorFinal: number;
+  valorFinal!: number;
 
   @ApiProperty({ example: 'Vigente' })
-  situacao: string;
+  situacao!: string;
 
   @ApiProperty({ example: 'SEDUC-AM' })
-  unidadeGestora: string;
+  unidadeGestora!: string;
 
   @ApiPropertyOptional({ example: 'MEC' })
-  orgaoSuperior: string | null;
+  orgaoSuperior!: string | null;
 
   @ApiProperty({ type: ContractTimelineFinancialSummaryDto })
-  resumoFinanceiro: ContractTimelineFinancialSummaryDto;
+  resumoFinanceiro!: ContractTimelineFinancialSummaryDto;
 
   @ApiProperty({ type: [ExpenseTimelineItemDto] })
-  empenhos: ExpenseTimelineItemDto[];
+  empenhos!: ExpenseTimelineItemDto[];
 
   @ApiProperty({ type: [ExpenseTimelineItemDto] })
-  liquidacoes: ExpenseTimelineItemDto[];
+  liquidacoes!: ExpenseTimelineItemDto[];
 
   @ApiProperty({ type: [ExpenseTimelineItemDto] })
-  pagamentos: ExpenseTimelineItemDto[];
+  pagamentos!: ExpenseTimelineItemDto[];
 }
 
 export class ContractTimelineResponseDto {
   @ApiProperty({ example: '23008295000148' })
-  cnpj: string;
+  cnpj!: string;
 
   @ApiProperty({ example: 'EMPRESA TECNOLOGIA LTDA' })
-  empresa: string;
+  empresa!: string;
 
   @ApiProperty({ example: 3 })
-  totalContratos: number;
+  totalContratos!: number;
 
   @ApiProperty({ example: 15 })
-  totalEmpenhos: number;
+  totalEmpenhos!: number;
 
-  @ApiProperty({
-    description: 'Número de empenhos sem contrato correlacionado',
-    example: 2,
-  })
-  empenhosSemContrato: number;
+  @ApiProperty({ description: 'Número de empenhos sem contrato correlacionado', example: 2 })
+  empenhosSemContrato!: number;
 
   @ApiProperty({ type: [ContractTimelineItemDto] })
-  contratos: ContractTimelineItemDto[];
+  contratos!: ContractTimelineItemDto[];
 }

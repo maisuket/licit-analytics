@@ -15,55 +15,34 @@ import { OsStatus } from '@prisma/client';
 export { OsStatus };
 
 export class CreateServiceOrderDto {
-  @ApiProperty({
-    description: 'ID da Nota de Empenho (Expense) no banco de dados',
-    example: 'uuid-empenho-123',
-  })
+  @ApiProperty({ description: 'ID da Nota de Empenho (Expense) no banco', example: 'uuid-empenho-123' })
   @IsString()
-  expenseId: string;
+  expenseId!: string;
 
-  @ApiProperty({
-    description: 'Número da Ordem de Serviço',
-    example: '022/2026',
-  })
+  @ApiProperty({ description: 'Número da Ordem de Serviço', example: '022/2026' })
   @IsString()
-  numeroOS: string;
+  numeroOS!: string;
 
-  @ApiProperty({
-    description: 'Unidade/Local de execução',
-    example: 'EE ADELAIDE TAVARES DE MACEDO',
-  })
+  @ApiProperty({ description: 'Unidade/Local de execução', example: 'EE ADELAIDE TAVARES DE MACEDO' })
   @IsString()
-  unidade: string;
+  unidade!: string;
 
-  @ApiProperty({
-    description: 'Data de execução',
-    example: '2026-01-13T00:00:00Z',
-  })
+  @ApiProperty({ description: 'Data de execução', example: '2026-01-13T00:00:00Z' })
   @IsDateString()
-  dataExecucao: string;
+  dataExecucao!: string;
 
-  @ApiProperty({
-    description: 'Quantidade (Ex: número de máquinas)',
-    example: 44,
-  })
+  @ApiProperty({ description: 'Quantidade (Ex: número de máquinas)', example: 44 })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  quantidade: number;
+  quantidade!: number;
 
-  @ApiPropertyOptional({
-    description: 'Contrato vinculado',
-    example: '0057/2022',
-  })
+  @ApiPropertyOptional({ description: 'Contrato vinculado', example: '0057/2022' })
   @IsString()
   @IsOptional()
   contrato?: string;
 
-  @ApiPropertyOptional({
-    description: 'Descrição / Categoria',
-    example: 'CAPITAL',
-  })
+  @ApiPropertyOptional({ description: 'Descrição / Categoria', example: 'CAPITAL' })
   @IsString()
   @IsOptional()
   descricao?: string;
@@ -81,17 +60,17 @@ export class CreateServiceOrderDto {
   @ApiProperty({ description: 'Custo total da operação', example: 4400.0 })
   @Type(() => Number)
   @IsNumber()
-  custoTotal: number;
+  custoTotal!: number;
 
   @ApiProperty({ description: 'Valor Final (Vf) a faturar', example: 45757.0 })
   @Type(() => Number)
   @IsNumber()
-  valorFinal: number;
+  valorFinal!: number;
 
   @ApiProperty({ description: 'Margem de lucro calculada', example: 0.0961 })
   @Type(() => Number)
   @IsNumber()
-  margem: number;
+  margem!: number;
 
   @ApiPropertyOptional({ enum: OsStatus, default: OsStatus.AGUARDANDO })
   @IsEnum(OsStatus)
@@ -103,10 +82,7 @@ export class CreateServiceOrderDto {
   @IsOptional()
   competencia?: string;
 
-  @ApiPropertyOptional({
-    description: 'Número do Processo',
-    example: '01.01.028101.005520/2026-90',
-  })
+  @ApiPropertyOptional({ description: 'Número do Processo', example: '01.01.028101.005520/2026-90' })
   @IsString()
   @IsOptional()
   processo?: string;
