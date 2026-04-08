@@ -1,11 +1,10 @@
-import { Injectable, Logger, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Prisma, TipoDespesa, Expense, Contract } from '@prisma/client';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
 import { CompanyService } from '../company/company.service';
 import { DashboardResponseDto } from './dto/dashboard-response.dto';
 import { AnalysisSummaryDto } from './dto/analysis-summary.dto';
-import { TipoDespesa, Expense, Contract } from '@prisma/client';
-import * as crypto from 'crypto'; // Usado para gerar IDs temporários para o frontend
-// ATENÇÃO: Ajuste o caminho abaixo conforme sua estrutura
 import { DATA_PROVIDER_TOKEN } from '../data-provider/interfaces/data-provider.interface';
 import type { IDataProvider } from '../data-provider/interfaces/data-provider.interface';
 
@@ -70,27 +69,29 @@ export class AnalysisService {
       `A extrair e formatar dados do Dashboard BI para CNPJ: ${cnpj}`,
     );
 
-    let company;
+    // Tenta buscar no banco local; se não existir faz fallback para a API
+    let company: Prisma.CompanyGetPayload<Record<string, never>> | null = null;
     try {
-      // 1. Tenta buscar no banco local
       company = await this.companyService.findByCnpj(cnpj);
-    } catch (error) {
-      // 2. FALLBACK: Se não achar, busca direto na API da transparência!
+    } catch {
       this.logger.warn(
-        `Empresa não encontrada no Postgre. Acionando Fallback da API para CNPJ: ${cnpj}`,
+        `Empresa não encontrada localmente. Acionando fallback da API para CNPJ: ${cnpj}`,
       );
       return this.getDashboardDataFromPortal(cnpj);
     }
 
-    // Busca paralela para otimizar tempo de resposta (Banco Local)
+    // Busca paralela com take máximo de 500 para evitar estouro de memória
+    const MAX_RECORDS = 500;
     const [empenhos, contratos] = await Promise.all([
       this.prisma.expense.findMany({
         where: { companyId: company.id, tipo: TipoDespesa.EMPENHO },
         orderBy: { data: 'desc' },
+        take: MAX_RECORDS,
       }),
       this.prisma.contract.findMany({
         where: { companyId: company.id },
         orderBy: { valorFinal: 'desc' },
+        take: MAX_RECORDS,
       }),
     ]);
 

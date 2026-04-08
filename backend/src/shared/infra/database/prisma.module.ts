@@ -1,5 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import { PrismaService } from 'src/shared/infra/database/prisma.service';
+import { PrismaService } from './prisma.service';
 
 @Global() // O @Global() permite que o PrismaService seja injetado em qualquer módulo sem necessidade de reimportar o DatabaseModule
 @Module({

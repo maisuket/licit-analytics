@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
-import { CacheService } from 'src/shared/cache/cache.service';
 import { CompanyService } from '../company/company.service';
 import { DATA_PROVIDER_TOKEN } from '../data-provider/interfaces/data-provider.interface';
 import type { IDataProvider } from '../data-provider/interfaces/data-provider.interface';
@@ -14,7 +14,6 @@ export class ExpenseService {
   constructor(
     @Inject(DATA_PROVIDER_TOKEN) private readonly dataProvider: IDataProvider,
     private readonly prisma: PrismaService,
-    private readonly cacheService: CacheService,
     private readonly companyService: CompanyService,
   ) {}
 
@@ -61,7 +60,7 @@ export class ExpenseService {
     const skip = (page - 1) * limit;
 
     // 2. Construção dinâmica dos filtros
-    const where: any = { companyId: company.id };
+    const where: Prisma.ExpenseWhereInput = { companyId: company.id };
 
     if (search) {
       where.OR = [

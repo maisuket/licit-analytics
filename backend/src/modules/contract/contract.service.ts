@@ -1,7 +1,12 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
 import { CompanyService } from '../company/company.service';
-import { DATA_PROVIDER_TOKEN } from '../data-provider/interfaces/data-provider.interface';
+import {
+  DATA_PROVIDER_TOKEN,
+  IDataProvider,
+  RawContractData,
+} from '../data-provider/interfaces/data-provider.interface';
 import { QueryContractDto } from './dto/query-contract.dto';
 
 @Injectable()
@@ -9,7 +14,7 @@ export class ContractService {
   private readonly logger = new Logger(ContractService.name);
 
   constructor(
-    @Inject(DATA_PROVIDER_TOKEN) private readonly dataProvider: any,
+    @Inject(DATA_PROVIDER_TOKEN) private readonly dataProvider: IDataProvider,
     private readonly prisma: PrismaService,
     private readonly companyService: CompanyService,
   ) {}
@@ -24,7 +29,7 @@ export class ContractService {
   async importRealContracts(cnpj: string) {
     const company = await this.companyService.findByCnpj(cnpj);
 
-    let allRawContracts: any[] = [];
+    let allRawContracts: RawContractData[] = [];
     let currentPage = 1;
     let hasMorePages = true;
 
@@ -67,10 +72,19 @@ export class ContractService {
     // Se não encontrou contratos em nenhuma página, encerra.
     if (allRawContracts.length === 0) return { count: 0 };
 
-    // Formata para salvar no Prisma
-    const contractsToCreate = allRawContracts.map((raw) => ({
-      ...raw,
+    // Mapeia RawContractData para o formato esperado pelo Prisma
+    const contractsToCreate: Prisma.ContractCreateManyInput[] = allRawContracts.map((raw) => ({
       companyId: company.id,
+      numero: raw.numero,
+      objeto: raw.objeto,
+      dataAssinatura: raw.dataAssinatura,
+      dataInicioVigencia: raw.dataInicioVigencia,
+      dataFimVigencia: raw.dataFimVigencia,
+      valorInicial: raw.valorInicial,
+      valorFinal: raw.valorFinal,
+      situacao: raw.situacao,
+      unidadeGestora: raw.unidadeGestora,
+      orgaoSuperior: raw.orgaoSuperior,
     }));
 
     this.logger.log(
@@ -94,7 +108,7 @@ export class ContractService {
     const skip = (page - 1) * limit;
 
     // 2. Construção da cláusula de filtro (garantindo que pertence à empresa alvo)
-    const where: any = { companyId: company.id };
+    const where: Prisma.ContractWhereInput = { companyId: company.id };
 
     if (search) {
       where.OR = [

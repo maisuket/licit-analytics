@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEnum } from 'class-validator';
-import { OsStatus } from './create-service-order.dto';
-import { PaginationDto } from 'src/shared/pagination/pagination.dto';
+import { OsStatus } from '@prisma/client';
+import { PaginationDto } from '../../shared/pagination/pagination.dto';
 
 // A classe herda automaticamente as propriedades 'page' e 'limit' do PaginationDto
 export class QueryServiceOrderDto extends PaginationDto {

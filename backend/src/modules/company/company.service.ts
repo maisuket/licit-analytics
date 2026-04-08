@@ -1,8 +1,8 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma, Company } from '@prisma/client';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { QueryCompanyDto } from './dto/query-company.dto';
-import { Company } from '@prisma/client';
 
 @Injectable()
 export class CompanyService {
@@ -11,27 +11,16 @@ export class CompanyService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Cria uma nova empresa ou retorna a existente se o CNPJ já estiver registado
+   * Cria uma nova empresa ou retorna a existente se o CNPJ já estiver registado.
+   * Usa upsert para ser seguro sob concorrência (dois jobs simultâneos para o mesmo CNPJ).
    */
   async createOrFind(data: CreateCompanyDto): Promise<Company> {
-    this.logger.debug(
-      `A verificar existência da empresa com CNPJ: ${data.cnpj}`,
-    );
+    this.logger.debug(`Upsert de empresa com CNPJ: ${data.cnpj}`);
 
-    const existingCompany = await this.prisma.company.findUnique({
+    return this.prisma.company.upsert({
       where: { cnpj: data.cnpj },
-    });
-
-    if (existingCompany) {
-      this.logger.debug(
-        `Empresa já existente encontrada: ${existingCompany.id}`,
-      );
-      return existingCompany;
-    }
-
-    this.logger.log(`A criar nova empresa: ${data.name} (${data.cnpj})`);
-    return this.prisma.company.create({
-      data: {
+      update: {},
+      create: {
         cnpj: data.cnpj,
         name: data.name,
       },
@@ -39,13 +28,13 @@ export class CompanyService {
   }
 
   /**
-   * NOVO: Lista todas as empresas com paginação e pesquisa flexível
+   * Lista todas as empresas com paginação e pesquisa flexível
    */
   async findAll(query: QueryCompanyDto) {
     const { page = 1, limit = 10, search } = query;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.CompanyWhereInput = {};
 
     if (search) {
       where.OR = [

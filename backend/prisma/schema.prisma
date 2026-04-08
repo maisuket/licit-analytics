@@ -120,6 +120,9 @@ model Amendment {
   year       Int
   value      Decimal  @db.Decimal(18, 2)
   company    Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("amendments")
 }
 
 model Grant {
@@ -130,4 +133,7 @@ model Grant {
   valueGlobal Decimal  @db.Decimal(18, 2)
   status      String
   company     Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("grants")
 }

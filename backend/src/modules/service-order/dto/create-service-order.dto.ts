@@ -9,12 +9,10 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { OsStatus } from '@prisma/client';
 
-export enum OsStatus {
-  AGUARDANDO = 'AGUARDANDO',
-  FATURADO = 'FATURADO',
-  PAGO = 'PAGO',
-}
+// Re-exportado para uso em outros DTOs sem quebrar imports existentes
+export { OsStatus };
 
 export class CreateServiceOrderDto {
   @ApiProperty({
