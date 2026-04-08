@@ -1,5 +1,15 @@
 import { TipoDespesa } from '@prisma/client';
 
+// Fases de despesa conforme a API do Portal da Transparência
+// 1 = Empenho | 2 = Liquidação | 3 = Pagamento
+export type DespesaFase = 1 | 2 | 3;
+
+export const DESPESA_FASE_MAP: Record<DespesaFase, TipoDespesa> = {
+  1: TipoDespesa.EMPENHO,
+  2: TipoDespesa.LIQUIDACAO,
+  3: TipoDespesa.PAGAMENTO,
+};
+
 export interface RawExpenseData {
   orgao: string;
   orgaoSuperior?: string;
@@ -30,20 +40,19 @@ export const DATA_PROVIDER_TOKEN = Symbol('DATA_PROVIDER');
 
 export interface IDataProvider {
   /**
-   * Procura despesas públicas por CNPJ e Ano.
-   * Retorna os dados num formato normalizado independente da fonte (Portal da Transparência, Web Scraping, etc).
-   * @param pagina Parâmetro opcional para paginação na API.
+   * Busca documentos de despesa por CNPJ, Ano e Fase.
+   * fase=1 → Empenhos | fase=2 → Liquidações | fase=3 → Pagamentos
+   * @param pagina Paginação (padrão: 1)
    */
   fetchExpensesByCnpjAndYear(
     cnpj: string,
     year: number,
+    fase?: DespesaFase,
     pagina?: number,
   ): Promise<RawExpenseData[]>;
 
   /**
-   * Procura contratos públicos por CNPJ.
-   * Retorna os dados num formato normalizado independente da fonte.
-   * @param pagina Parâmetro opcional para paginação na API.
+   * Busca contratos públicos por CNPJ com paginação.
    */
   fetchContractsByCnpj(
     cnpj: string,

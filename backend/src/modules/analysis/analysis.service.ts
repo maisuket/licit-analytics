@@ -3,8 +3,15 @@ import { Prisma, TipoDespesa, Expense, Contract } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
 import { CompanyService } from '../company/company.service';
+import { CorrelationService } from '../contract/services/correlation.service';
 import { DashboardResponseDto } from './dto/dashboard-response.dto';
 import { AnalysisSummaryDto } from './dto/analysis-summary.dto';
+import {
+  ContractTimelineResponseDto,
+  ContractTimelineItemDto,
+  ExpenseTimelineItemDto,
+  ContractTimelineFinancialSummaryDto,
+} from './dto/contract-timeline-response.dto';
 import { DATA_PROVIDER_TOKEN } from '../data-provider/interfaces/data-provider.interface';
 import type { IDataProvider } from '../data-provider/interfaces/data-provider.interface';
 
@@ -15,8 +22,9 @@ export class AnalysisService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly companyService: CompanyService,
+    private readonly correlationService: CorrelationService,
     @Inject(DATA_PROVIDER_TOKEN)
-    private readonly dataProvider: IDataProvider, // Injeção do provider da Transparência
+    private readonly dataProvider: IDataProvider,
   ) {}
 
   async getCompanySummary(cnpj: string): Promise<AnalysisSummaryDto> {
@@ -272,5 +280,134 @@ export class AnalysisService {
       minute: '2-digit',
     });
     return isToday ? `Hoje, ${time}` : `${this.formatDate(d)}, ${time}`;
+  }
+
+  // ========================================================================
+  // CONTRACT TIMELINE
+  // ========================================================================
+
+  /**
+   * Retorna a linha do tempo completa por contrato para um CNPJ:
+   * Contratos → Empenhos vinculados → Liquidações → Pagamentos
+   *
+   * Se ainda houver empenhos sem contractId, executa a correlação automática antes.
+   */
+  async getContractTimeline(cnpj: string): Promise<ContractTimelineResponseDto> {
+    this.logger.log(`Construindo contract-timeline para CNPJ: ${cnpj}`);
+
+    const company = await this.companyService.findByCnpj(cnpj);
+
+    // Verifica se há empenhos sem vínculo e tenta correlacionar
+    const unlinkedCount = await this.prisma.expense.count({
+      where: { companyId: company.id, contractId: null },
+    });
+
+    if (unlinkedCount > 0) {
+      this.logger.log(
+        `${unlinkedCount} empenho(s) sem contrato — executando correlação automática`,
+      );
+      await this.correlationService.correlateForCompany(company.id);
+    }
+
+    // Busca contratos com todos os empenhos/liquidações/pagamentos vinculados
+    const contracts = await this.prisma.contract.findMany({
+      where: { companyId: company.id },
+      orderBy: { valorFinal: 'desc' },
+      include: {
+        expenses: {
+          orderBy: { data: 'asc' },
+        },
+      },
+    });
+
+    // Conta empenhos ainda sem correlação após o processo
+    const remainingUnlinked = await this.prisma.expense.count({
+      where: { companyId: company.id, contractId: null },
+    });
+
+    const totalExpenses = await this.prisma.expense.count({
+      where: { companyId: company.id },
+    });
+
+    const contratosDto: ContractTimelineItemDto[] = contracts.map((contract) => {
+      const empenhos = contract.expenses.filter(
+        (e) => e.tipo === TipoDespesa.EMPENHO,
+      );
+      const liquidacoes = contract.expenses.filter(
+        (e) => e.tipo === TipoDespesa.LIQUIDACAO,
+      );
+      const pagamentos = contract.expenses.filter(
+        (e) => e.tipo === TipoDespesa.PAGAMENTO,
+      );
+
+      const totalEmpenhado = empenhos.reduce(
+        (acc, e) => acc + Number(e.valorOriginal),
+        0,
+      );
+      const totalLiquidado = liquidacoes.reduce(
+        (acc, e) => acc + Number(e.valorOriginal),
+        0,
+      );
+      const totalPago = pagamentos.reduce(
+        (acc, e) => acc + Number(e.valorOriginal),
+        0,
+      );
+
+      const resumoFinanceiro: ContractTimelineFinancialSummaryDto = {
+        totalEmpenhado,
+        totalLiquidado,
+        totalPago,
+        saldoAReceber: totalEmpenhado - totalPago,
+        percentualLiquidado:
+          totalEmpenhado > 0
+            ? Math.min(1, totalLiquidado / totalEmpenhado)
+            : 0,
+        percentualPago:
+          totalEmpenhado > 0 ? Math.min(1, totalPago / totalEmpenhado) : 0,
+      };
+
+      return {
+        id: contract.id,
+        numero: contract.numero,
+        objeto: contract.objeto,
+        dataAssinatura: contract.dataAssinatura,
+        dataInicioVigencia: contract.dataInicioVigencia,
+        dataFimVigencia: contract.dataFimVigencia,
+        valorInicial: Number(contract.valorInicial),
+        valorFinal: Number(contract.valorFinal),
+        situacao: contract.situacao,
+        unidadeGestora: contract.unidadeGestora,
+        orgaoSuperior: contract.orgaoSuperior,
+        resumoFinanceiro,
+        empenhos: empenhos.map(this.mapExpenseToTimelineItem),
+        liquidacoes: liquidacoes.map(this.mapExpenseToTimelineItem),
+        pagamentos: pagamentos.map(this.mapExpenseToTimelineItem),
+      };
+    });
+
+    return {
+      cnpj,
+      empresa: company.name,
+      totalContratos: contracts.length,
+      totalEmpenhos: totalExpenses,
+      empenhosSemContrato: remainingUnlinked,
+      contratos: contratosDto,
+    };
+  }
+
+  private mapExpenseToTimelineItem(expense: Expense): ExpenseTimelineItemDto {
+    return {
+      id: expense.id,
+      numeroDocumento: expense.numeroDocumento,
+      tipo: expense.tipo,
+      orgao: expense.orgao,
+      orgaoSuperior: expense.orgaoSuperior ?? null,
+      unidadeGestora: expense.unidadeGestora ?? null,
+      valorOriginal: Number(expense.valorOriginal),
+      data: expense.data,
+      numeroProcesso: expense.numeroProcesso ?? null,
+      elementoDespesa: expense.elementoDespesa ?? null,
+      descricao: expense.descricao,
+    };
   }
 }

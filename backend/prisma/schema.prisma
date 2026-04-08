@@ -36,31 +36,38 @@ model Expense {
   companyId       String
   numeroDocumento String         // Ex: 2026NE0000503
   orgao           String         // Ex: SEDUC
-  
-  // --- Restaurando os Campos da API Pública ---
+
+  // --- Campos da API Pública ---
   orgaoSuperior   String?        @db.VarChar(255)
   unidadeGestora  String?        @db.VarChar(255)
   tipo            TipoDespesa    @default(EMPENHO)
   descricao       String         @db.Text
   numeroProcesso  String?        @db.VarChar(100)
   elementoDespesa String?        @db.VarChar(255)
-  
-  // O valor público agora é mapeado para "valorOriginal" (Teto do Empenho)
-  valorOriginal   Decimal        @db.Decimal(15, 2) 
-  
+
+  // Valor público mapeado para "valorOriginal" (Teto do Empenho)
+  valorOriginal   Decimal        @db.Decimal(15, 2)
+
   // --- Campos do ERP Interno ---
   recurso         String?        // Ex: CAPITAL, INTERIOR
   competencia     String?        // Ex: JANEIRO/MARÇO
   valorFaturado   Decimal        @default(0) @db.Decimal(15, 2)
   saldo           Decimal        @default(0) @db.Decimal(15, 2)
-  
+
   data            DateTime
-  createdAt       DateTime       @default(now()) // Restaura funcionalidade do painel
-  
+  createdAt       DateTime       @default(now())
+
+  // Vínculo com Contrato (correlacionado via numeroProcesso ou importação)
+  contractId      String?
+  contract        Contract?      @relation(fields: [contractId], references: [id])
+
   // Relacionamentos
   company         Company        @relation(fields: [companyId], references: [id])
-  ordensServico   ServiceOrder[] // Um empenho paga várias O.S.
+  ordensServico   ServiceOrder[]
 
+  @@index([contractId])
+  @@index([companyId, tipo])
+  @@index([numeroProcesso])
   @@map("expenses")
 }
 
@@ -77,9 +84,11 @@ model Contract {
   situacao           String    @db.VarChar(100)
   unidadeGestora     String    @db.VarChar(255)
   orgaoSuperior      String?   @db.VarChar(255)
-  
-  company            Company   @relation(fields: [companyId], references: [id])
 
+  company            Company   @relation(fields: [companyId], references: [id])
+  expenses           Expense[] // Empenhos, liquidações e pagamentos vinculados
+
+  @@index([companyId])
   @@map("contracts")
 }
 

@@ -6,6 +6,8 @@ import { TipoDespesa } from '@prisma/client';
 import {
   IDataProvider,
   RawExpenseData,
+  DespesaFase,
+  DESPESA_FASE_MAP,
 } from '../interfaces/data-provider.interface';
 
 @Injectable()
@@ -20,65 +22,55 @@ export class TransparencyApiProvider implements IDataProvider {
   ) {}
 
   /**
-   * Procura dados reais no Portal da Transparência
-   */
-  /**
-   * NOVO: Aceita o parâmetro de página dinamicamente para Despesas/Empenhos
+   * Busca documentos de despesa por CNPJ, Ano e Fase.
+   * fase=1 → Empenhos | fase=2 → Liquidações | fase=3 → Pagamentos
    */
   async fetchExpensesByCnpjAndYear(
     cnpj: string,
     year: number,
+    fase: DespesaFase = 1,
     pagina: number = 1,
   ): Promise<RawExpenseData[]> {
     const apiKey = this.configService.get<string>('PORTAL_API_KEY');
-    if (!apiKey)
-      throw new HttpException(
-        'API Key ausente.',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+    if (!apiKey) {
+      throw new HttpException('API Key ausente.', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    const faseName = fase === 1 ? 'EMPENHOS' : fase === 2 ? 'LIQUIDAÇÕES' : 'PAGAMENTOS';
 
     try {
       this.logger.log(
-        `A extrair EMPENHOS do Portal para CNPJ: ${cnpj} (Ano: ${year}) | Página: ${pagina}`,
+        `Buscando ${faseName} no Portal | CNPJ: ${cnpj} | Ano: ${year} | Página: ${pagina}`,
       );
 
       const response = await firstValueFrom(
-        this.httpService.get(
-          `${this.baseUrl}/despesas/documentos-por-favorecido`,
-          {
-            // O parâmetro pagina agora é injetado dinamicamente na requisição
-            params: { codigoPessoa: cnpj, ano: year, fase: 1, pagina: pagina },
-            headers: { 'chave-api-dados': apiKey },
-          },
-        ),
+        this.httpService.get(`${this.baseUrl}/despesas/documentos-por-favorecido`, {
+          params: { codigoPessoa: cnpj, ano: year, fase, pagina },
+          headers: { 'chave-api-dados': apiKey },
+        }),
       );
 
-      const data = response.data;
+      const data: unknown = response.data;
       if (!Array.isArray(data)) return [];
 
-      return data.map((item: any) => {
-        let tipoDespesa: TipoDespesa = TipoDespesa.EMPENHO;
-        if (item.fase === 'Liquidação') tipoDespesa = TipoDespesa.LIQUIDACAO;
-        if (item.fase === 'Pagamento') tipoDespesa = TipoDespesa.PAGAMENTO;
-
-        return {
-          orgao: item.orgao || 'ÓRGÃO NÃO IDENTIFICADO',
-          orgaoSuperior: item.orgaoSuperior || null,
-          unidadeGestora: item.ug || null,
-          tipo: tipoDespesa,
-          valor: this.parseGovernmentValue(item.valor),
-          data: this.parseGovernmentDate(item.data),
-          descricao: item.observacao || 'SEM DESCRIÇÃO',
-          numeroDocumento: item.documentoResumido || item.documento || 'S/N',
-          numeroProcesso: item.numeroProcesso || null,
-          elementoDespesa: item.elemento || null,
-        };
-      });
-    } catch (error: any) {
-      this.logger.error(
-        `Erro na integração de empenhos (Página ${pagina}): ${error.message}`,
-      );
-      // Tal como nos contratos, retornamos array vazio para que o loop de paginação no Service termine em segurança
+      return (data as Record<string, unknown>[]).map((item) => ({
+        orgao: (item['orgao'] as string) || 'ÓRGÃO NÃO IDENTIFICADO',
+        orgaoSuperior: (item['orgaoSuperior'] as string | null) || null,
+        unidadeGestora: (item['ug'] as string | null) || null,
+        tipo: DESPESA_FASE_MAP[fase],
+        valor: this.parseGovernmentValue(item['valor'] as string | number | undefined),
+        data: this.parseGovernmentDate(item['data'] as string | undefined),
+        descricao: (item['observacao'] as string) || 'SEM DESCRIÇÃO',
+        numeroDocumento:
+          (item['documentoResumido'] as string) ||
+          (item['documento'] as string) ||
+          'S/N',
+        numeroProcesso: (item['numeroProcesso'] as string | null) || null,
+        elementoDespesa: (item['elemento'] as string | null) || null,
+      }));
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Erro ao buscar ${faseName} (Página ${pagina}): ${msg}`);
       return [];
     }
   }
@@ -123,32 +115,35 @@ export class TransparencyApiProvider implements IDataProvider {
         }),
       );
 
-      const data = response.data;
+      const data: unknown = response.data;
       if (!Array.isArray(data)) return [];
 
-      return data.map((item: any) => ({
-        numero: item.numero || 'S/N',
-        objeto: item.objeto || 'SEM DESCRIÇÃO',
-        dataAssinatura: item.dataAssinatura
-          ? new Date(`${item.dataAssinatura}T12:00:00Z`)
-          : null,
-        dataInicioVigencia: item.dataInicioVigencia
-          ? new Date(`${item.dataInicioVigencia}T12:00:00Z`)
-          : null,
-        dataFimVigencia: item.dataFimVigencia
-          ? new Date(`${item.dataFimVigencia}T12:00:00Z`)
-          : null,
-        valorInicial: item.valorInicialCompra || 0,
-        valorFinal: item.valorFinalCompra || 0,
-        situacao: item.situacaoContrato || 'Desconhecida',
-        unidadeGestora: item.unidadeGestora?.nome || 'ÓRGÃO NÃO IDENTIFICADO',
-        orgaoSuperior: item.unidadeGestora?.orgaoMaximo?.nome || null,
-      }));
-    } catch (error: any) {
-      this.logger.error(
-        `Erro ao buscar contratos na página ${pagina}: ${error.message}`,
-      );
-      // Em vez de falhar completamente, retornamos array vazio para encerrar a paginação graciosamente
+      return (data as Record<string, unknown>[]).map((item) => {
+        const ug = item['unidadeGestora'] as Record<string, unknown> | undefined;
+        const orgaoMaximo = ug?.['orgaoMaximo'] as Record<string, unknown> | undefined;
+
+        return {
+          numero: (item['numero'] as string) || 'S/N',
+          objeto: (item['objeto'] as string) || 'SEM DESCRIÇÃO',
+          dataAssinatura: item['dataAssinatura']
+            ? new Date(`${item['dataAssinatura']}T12:00:00Z`)
+            : null,
+          dataInicioVigencia: item['dataInicioVigencia']
+            ? new Date(`${item['dataInicioVigencia']}T12:00:00Z`)
+            : null,
+          dataFimVigencia: item['dataFimVigencia']
+            ? new Date(`${item['dataFimVigencia']}T12:00:00Z`)
+            : null,
+          valorInicial: (item['valorInicialCompra'] as number) || 0,
+          valorFinal: (item['valorFinalCompra'] as number) || 0,
+          situacao: (item['situacaoContrato'] as string) || 'Desconhecida',
+          unidadeGestora: (ug?.['nome'] as string) || 'ÓRGÃO NÃO IDENTIFICADO',
+          orgaoSuperior: (orgaoMaximo?.['nome'] as string | null) ?? null,
+        };
+      });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Erro ao buscar contratos na página ${pagina}: ${msg}`);
       return [];
     }
   }

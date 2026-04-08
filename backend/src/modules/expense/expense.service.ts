@@ -2,10 +2,16 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
 import { CompanyService } from '../company/company.service';
-import { DATA_PROVIDER_TOKEN } from '../data-provider/interfaces/data-provider.interface';
+import {
+  DATA_PROVIDER_TOKEN,
+  DespesaFase,
+  RawExpenseData,
+} from '../data-provider/interfaces/data-provider.interface';
 import type { IDataProvider } from '../data-provider/interfaces/data-provider.interface';
 import { ImportExpenseDto } from './dto/import-expense.dto';
 import { QueryExpenseDto } from './dto/query-expense.dto';
+
+const ALL_PHASES: DespesaFase[] = [1, 2, 3];
 
 @Injectable()
 export class ExpenseService {
@@ -17,39 +23,87 @@ export class ExpenseService {
     private readonly companyService: CompanyService,
   ) {}
 
-  async executeImport(dto: ImportExpenseDto) {
+  /**
+   * Busca todas as páginas de uma fase até a API retornar vazio.
+   */
+  private async fetchAllPagesForPhase(
+    cnpj: string,
+    year: number,
+    fase: DespesaFase,
+  ): Promise<RawExpenseData[]> {
+    const all: RawExpenseData[] = [];
+    let page = 1;
+
+    while (true) {
+      const chunk = await this.dataProvider.fetchExpensesByCnpjAndYear(
+        cnpj,
+        year,
+        fase,
+        page,
+      );
+
+      if (!chunk || chunk.length === 0) break;
+
+      all.push(...chunk);
+      page++;
+
+      // Throttle para evitar rate limiting da API do governo
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    return all;
+  }
+
+  /**
+   * Importa Empenhos, Liquidações e Pagamentos para um CNPJ/Ano.
+   * Busca todas as páginas de cada fase e persiste no banco (skipDuplicates).
+   */
+  async executeImport(dto: ImportExpenseDto): Promise<{ count: number; byPhase: Record<string, number> }> {
     const company = await this.companyService.createOrFind({
       cnpj: dto.cnpj,
       name: 'Empresa em Processamento',
     });
 
-    const rawExpenses = await this.dataProvider.fetchExpensesByCnpjAndYear(
-      dto.cnpj,
-      dto.year,
-    );
+    const byPhase: Record<string, number> = { empenhos: 0, liquidacoes: 0, pagamentos: 0 };
+    const phaseNames: Record<DespesaFase, string> = { 1: 'empenhos', 2: 'liquidacoes', 3: 'pagamentos' };
+    let totalCount = 0;
 
-    if (!rawExpenses || rawExpenses.length === 0) return { count: 0 };
+    for (const fase of ALL_PHASES) {
+      this.logger.log(`Importando fase=${fase} para CNPJ: ${dto.cnpj} (${dto.year})`);
 
-    const expensesToCreate = rawExpenses.map((raw) => ({
-      companyId: company.id,
-      orgao: raw.orgao,
-      orgaoSuperior: raw.orgaoSuperior,
-      unidadeGestora: raw.unidadeGestora,
-      tipo: raw.tipo,
-      valorOriginal: raw.valor,
-      data: raw.data,
-      descricao: raw.descricao,
-      numeroDocumento: raw.numeroDocumento,
-      numeroProcesso: raw.numeroProcesso,
-      elementoDespesa: raw.elementoDespesa,
-    }));
+      const rawExpenses = await this.fetchAllPagesForPhase(dto.cnpj, dto.year, fase);
 
-    const result = await this.prisma.expense.createMany({
-      data: expensesToCreate,
-      skipDuplicates: true,
-    });
+      if (rawExpenses.length === 0) {
+        this.logger.log(`Nenhum registro na fase=${fase}`);
+        continue;
+      }
 
-    return { count: result.count };
+      const expensesToCreate: Prisma.ExpenseCreateManyInput[] = rawExpenses.map((raw) => ({
+        companyId: company.id,
+        orgao: raw.orgao,
+        orgaoSuperior: raw.orgaoSuperior,
+        unidadeGestora: raw.unidadeGestora,
+        tipo: raw.tipo,
+        valorOriginal: raw.valor,
+        data: raw.data,
+        descricao: raw.descricao,
+        numeroDocumento: raw.numeroDocumento,
+        numeroProcesso: raw.numeroProcesso,
+        elementoDespesa: raw.elementoDespesa,
+      }));
+
+      const result = await this.prisma.expense.createMany({
+        data: expensesToCreate,
+        skipDuplicates: true,
+      });
+
+      byPhase[phaseNames[fase]] = result.count;
+      totalCount += result.count;
+
+      this.logger.log(`Fase=${fase}: ${result.count} registros salvos.`);
+    }
+
+    return { count: totalCount, byPhase };
   }
 
   async findByCompanyCnpj(cnpj: string, query: QueryExpenseDto) {
