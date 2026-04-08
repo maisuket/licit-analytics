@@ -4,14 +4,17 @@ import {
   LayoutDashboard,
   PieChart,
   Landmark,
+  GitBranch,
 } from "lucide-react";
+
+type ActiveMenu = "gov" | "operations" | "bi" | "financial" | "timeline";
 
 export default function Sidebar({
   activeMenu,
   setActiveMenu,
 }: {
-  activeMenu: "gov" | "operations" | "bi";
-  setActiveMenu: (m: "gov" | "operations" | "bi" | "financial") => void;
+  activeMenu: ActiveMenu;
+  setActiveMenu: (m: ActiveMenu) => void;
 }) {
   return (
     <aside className="w-64 bg-slate-900 text-slate-300 min-h-screen flex flex-col transition-all duration-300 shadow-2xl z-10">
@@ -65,6 +68,14 @@ export default function Sidebar({
         >
           <Landmark size={18} />
           <span className="font-medium text-sm">Contas a Receber</span>
+        </button>
+
+        <button
+          onClick={() => setActiveMenu("timeline")}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeMenu === "timeline" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/50" : "hover:bg-slate-800 hover:text-white"}`}
+        >
+          <GitBranch size={18} />
+          <span className="font-medium text-sm">Timeline de Contratos</span>
         </button>
       </nav>
     </aside>

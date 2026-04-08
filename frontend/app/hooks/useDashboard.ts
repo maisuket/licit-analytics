@@ -84,8 +84,9 @@ export function useDashboard(): UseDashboardReturn {
         // Dados reais encontrados, mas permitimos a sincronização
         setNeedsImport(true);
       }
-    } catch (err: any) {
-      if (err.message === "EMPRESA_NAO_ENCONTRADA") {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "";
+      if (message === "EMPRESA_NAO_ENCONTRADA") {
         setNeedsImport(true);
         setError(
           `Empresa não encontrada na base local. Clique em "Importar ${ano}" para buscar no Governo.`,
@@ -109,8 +110,9 @@ export function useDashboard(): UseDashboardReturn {
         `Importação iniciada para o ano ${ano} em segundo plano! Aguarde alguns instantes e clique em "Consultar" novamente.`,
       );
       setNeedsImport(false); // Esconde o botão após o clique para evitar spam de cliques
-    } catch (err: any) {
-      setError(err.message || "Erro ao iniciar importação.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao iniciar importação.";
+      setError(message);
       setNeedsImport(true); // Mostra o botão novamente se falhar
     } finally {
       setImporting(false);

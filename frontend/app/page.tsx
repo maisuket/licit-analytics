@@ -9,10 +9,11 @@ import { BIDashboard } from "./components/BIDashboard";
 import OperationControl from "./components/OperationControl";
 import { GovDashboard } from "./components/GovDashboard";
 import { FinancialDashboard } from "./components/FinancialDashboard";
+import { ContractTimeline } from "./components/ContractTimeline";
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<
-    "operations" | "bi" | "gov" | "financial"
+    "operations" | "bi" | "gov" | "financial" | "timeline"
   >("operations");
   const [cnpj, setCnpj] = useState("23008295000148");
 
@@ -110,6 +111,21 @@ export default function App() {
                   </p>
                 </header>
                 <FinancialDashboard ordens={ordens} loadErpData={loadErpData} />
+              </div>
+            )}
+
+            {activeMenu === "timeline" && (
+              <div>
+                <header className="mb-6">
+                  <h2 className="text-2xl font-bold text-slate-900">
+                    Timeline de Contratos
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    Ciclo completo por CNPJ: contratos → empenhos → liquidações
+                    → pagamentos, via Portal da Transparência.
+                  </p>
+                </header>
+                <ContractTimeline />
               </div>
             )}
           </div>

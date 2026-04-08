@@ -34,9 +34,10 @@ export function GovDashboard() {
       // O seu serviço já está preparado para ir à API buscar os dados públicos
       const data = await ApiService.getDashboard(searchCnpj);
       setGovData(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "";
       setError(
-        err.message === "EMPRESA_NAO_ENCONTRADA"
+        message === "EMPRESA_NAO_ENCONTRADA"
           ? "Não foram encontrados dados públicos para este CNPJ no Portal da Transparência."
           : "Ocorreu um erro ao consultar a API Governamental.",
       );

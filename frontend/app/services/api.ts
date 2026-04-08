@@ -1,4 +1,6 @@
 import {
+  ApiResponse,
+  ContractTimelineResponse,
   DashboardResponse,
   ErpContract,
   ErpExpense,
@@ -6,138 +8,100 @@ import {
   ImportResponse,
 } from "../types/dashboard";
 
-const API_BASE_URL = "http://localhost:3000";
+// Backend agora usa prefixo /api/v1/ via versionamento URI
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+const API_V1 = `${API_BASE_URL}/api/v1`;
 
+// ---------------------------------------------------------------------------
+// Helper: desempacota o envelope { success, data } retornado pelo backend
+// ---------------------------------------------------------------------------
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, options);
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({})) as Partial<ApiResponse<unknown>>;
+    const message = err?.error?.message ?? "Erro na requisição.";
+    throw new Error(
+      response.status === 404 ? "EMPRESA_NAO_ENCONTRADA" : message,
+    );
+  }
+
+  const json = await response.json() as ApiResponse<T> | T;
+
+  // Suporte ao envelope { success, data } e resposta direta (fallback)
+  if (json !== null && typeof json === "object" && "success" in json) {
+    return (json as ApiResponse<T>).data;
+  }
+  return json as T;
+}
+
+// ---------------------------------------------------------------------------
+// ApiService
+// ---------------------------------------------------------------------------
 export class ApiService {
-  // --- MÓDULO: INTELIGÊNCIA GOV ---
+  // ── GOV INTELLIGENCE ────────────────────────────────────────────────────
+
   static async getDashboard(cnpj: string): Promise<DashboardResponse> {
-    const cleanCnpj = cnpj.replace(/\D/g, "");
-
+    const clean = cnpj.replace(/\D/g, "");
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/analysis/dashboard/${cleanCnpj}`,
-        {
-          headers: { Accept: "application/json" },
-        },
+      return await fetchJson<DashboardResponse>(
+        `${API_V1}/analysis/dashboard/${clean}`,
       );
-
-      if (!response.ok) {
-        if (response.status === 404) throw new Error("EMPRESA_NAO_ENCONTRADA");
-        throw new Error("Erro ao buscar dados do dashboard.");
-      }
-
-      return response.json();
     } catch (error) {
-      console.warn(
-        "Backend local inacessível. A mostrar dados de demonstração.",
-        error,
-      );
-      if (error instanceof Error && error.message === "EMPRESA_NAO_ENCONTRADA")
+      if (error instanceof Error && error.message === "EMPRESA_NAO_ENCONTRADA") {
         throw error;
-
-      return {
-        stats: {
-          totalEmpenhado: "R$ 150.500,00",
-          empenhosAtivos: "03",
-          ultimaAtualizacao: "Hoje, 12:45",
-        },
-        empenhos: [
-          {
-            id: "1",
-            numeroEmpenho: "2024NE000123",
-            dataEmissao: "15/03/2024",
-            valorOriginal: "150.500,00",
-            processo: "23000.123456/2024-12",
-            elemento: "30 - Material de Consumo",
-            observacao: "AQUISIÇÃO DE EQUIPAMENTOS...",
-            favorecido: {
-              nome: "EMPRESA DE DEMONSTRAÇÃO S.A.",
-              cnpjFormatado: "12.345.678/0001-00",
-            },
-            unidadeGestora: {
-              nome: "CENTRO DE INTENDENCIA DA MARINHA EM MANAUS",
-              orgaoSuperior: "Ministério da Defesa",
-            },
-          },
-        ],
-        contratos: [
-          {
-            id: "c1",
-            numero: "102014",
-            objeto: "Contratação de empresa especializada...",
-            dataAssinatura: "23/05/2014",
-            vigencia: "23/05/2014 até 22/05/2015",
-            valorFinal: "14.828,00",
-            situacao: "Publicado",
-            orgao: "IFAM - CAMPUS MANAUS CENTRO",
-          },
-        ],
-      };
+      }
+      console.warn("Backend inacessível. Retornando dados de demonstração.", error);
+      return DEMO_DASHBOARD;
     }
+  }
+
+  static async getContractTimeline(
+    cnpj: string,
+  ): Promise<ContractTimelineResponse> {
+    const clean = cnpj.replace(/\D/g, "");
+    return fetchJson<ContractTimelineResponse>(
+      `${API_V1}/analysis/contract-timeline/${clean}`,
+    );
   }
 
   static async importExpenses(
     cnpj: string,
     year: number,
   ): Promise<ImportResponse> {
-    const cleanCnpj = cnpj.replace(/\D/g, "");
-
+    const clean = cnpj.replace(/\D/g, "");
     try {
-      const response = await fetch(`${API_BASE_URL}/expense/import`, {
+      return await fetchJson<ImportResponse>(`${API_V1}/expense/import`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cnpj: cleanCnpj, year }),
+        body: JSON.stringify({ cnpj: clean, year }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Erro ao solicitar importação.");
-      }
-
-      return response.json();
     } catch (error) {
-      console.warn(
-        "Simulando importação devido a falta de backend local.",
-        error,
-      );
-      return {
-        message: "Simulação de importação iniciada.",
-        jobId: "simulated-job-123",
-      };
+      console.warn("Simulando importação — backend inacessível.", error);
+      return { message: "Simulação de importação iniciada.", jobId: "simulated-job-123" };
     }
   }
 
-  // --- MÓDULO: OPERAÇÃO ERP (Dados Internos) ---
+  // ── ERP INTERNO ─────────────────────────────────────────────────────────
 
-  static async getErpData(
-    cnpj: string,
-  ): Promise<{
+  static async getErpData(cnpj: string): Promise<{
     empenhos: ErpExpense[];
     ordens: ErpServiceOrder[];
     contratos: ErpContract[];
   }> {
-    const cleanCnpj = cnpj.replace(/\D/g, "");
+    const clean = cnpj.replace(/\D/g, "");
     try {
       const [empRes, osRes, contRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/expense/${cleanCnpj}?limit=100`),
-        fetch(`${API_BASE_URL}/operation/os?limit=100`),
-        fetch(`${API_BASE_URL}/contract/${cleanCnpj}?limit=100`),
+        fetchJson<{ data: ErpExpense[] }>(`${API_V1}/expense/${clean}?limit=100`),
+        fetchJson<{ data: ErpServiceOrder[] }>(`${API_V1}/operation/os?limit=100`),
+        fetchJson<{ data: ErpContract[] }>(`${API_V1}/contract/${clean}?limit=100`).catch(
+          () => ({ data: [] as ErpContract[] }),
+        ),
       ]);
-
-      if (!empRes.ok || !osRes.ok) {
-        throw new Error("Backend offline ou limite de requisição excedido.");
-      }
-
-      const empJson = await empRes.json();
-      const osJson = await osRes.json();
-      const contJson = contRes.ok ? await contRes.json() : { data: [] };
-
-      // Extraímos a propriedade `.data` porque o Backend agora retorna paginação { data, meta }
-      // Mantemos o fallback para Array caso alguma rota ainda não tenha paginação.
       return {
-        empenhos: Array.isArray(empJson) ? empJson : empJson.data || [],
-        ordens: Array.isArray(osJson) ? osJson : osJson.data || [],
-        contratos: Array.isArray(contJson) ? contJson : contJson.data || [],
+        empenhos: empRes.data ?? [],
+        ordens: osRes.data ?? [],
+        contratos: contRes.data ?? [],
       };
     } catch (e) {
       console.error("Erro no getErpData:", e);
@@ -145,46 +109,26 @@ export class ApiService {
     }
   }
 
-  // AGORA CONECTADO AO BACKEND REAL: Lança a O.S. de verdade
-  static async createServiceOrder(data: any) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/operation/os`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || "Erro ao salvar a Ordem de Serviço.");
-      }
-      return response.json();
-    } catch (error: any) {
-      console.error("Falha ao criar OS:", error);
-      throw error;
-    }
+  static async createServiceOrder(
+    data: Record<string, unknown>,
+  ): Promise<unknown> {
+    return fetchJson<unknown>(`${API_V1}/operation/os`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
   }
 
-  // AGORA CONECTADO AO BACKEND REAL: Atualiza o status e NF
-  static async updateOsStatus(id: string, status: string, nf?: string) {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/operation/os/${id}/status`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status, nf }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Erro ao atualizar o status da Ordem de Serviço.");
-      }
-      return response.json();
-    } catch (error: any) {
-      console.error("Falha ao atualizar status:", error);
-      throw error;
-    }
+  static async updateOsStatus(
+    id: string,
+    status: string,
+    nf?: string,
+  ): Promise<unknown> {
+    return fetchJson<unknown>(`${API_V1}/operation/os/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, nf }),
+    });
   }
 
   static async importCsv(
@@ -192,47 +136,61 @@ export class ApiService {
     type: "empenho" | "os",
     file: File,
   ): Promise<{ message: string; imported: number }> {
-    const cleanCnpj = cnpj.replace(/\D/g, "");
-
-    // Para envio de ficheiros, usamos FormData nativo do navegador
+    const clean = cnpj.replace(/\D/g, "");
     const formData = new FormData();
     formData.append("file", file);
-
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/operation/import-csv/${cleanCnpj}/${type}`,
-        {
-          method: "POST",
-          // NOTA DE SÊNIOR: Não defina o cabeçalho 'Content-Type' manualmente aqui!
-          // O Fetch define automaticamente como 'multipart/form-data' e insere o 'boundary' correto.
-          body: formData,
-        },
-      );
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.message || `Erro ao importar arquivo de ${type}.`);
-      }
-
-      return response.json();
-    } catch (error: any) {
-      console.error(`Falha no upload de ${type}:`, error);
-      throw error;
-    }
+    return fetchJson<{ message: string; imported: number }>(
+      `${API_V1}/operation/import-csv/${clean}/${type}`,
+      { method: "POST", body: formData },
+    );
   }
 
   static async syncContracts(cnpj: string): Promise<{ count: number }> {
-    const cleanCnpj = cnpj.replace(/\D/g, "");
-    const response = await fetch(`${API_BASE_URL}/contract/sync/${cleanCnpj}`, {
+    const clean = cnpj.replace(/\D/g, "");
+    return fetchJson<{ count: number }>(`${API_V1}/contract/sync/${clean}`, {
       method: "POST",
     });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(
-        err.message || "Erro ao sincronizar contratos com o Governo.",
-      );
-    }
-    return response.json();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Dados de demonstração (fallback quando o backend está offline)
+// ---------------------------------------------------------------------------
+const DEMO_DASHBOARD: DashboardResponse = {
+  stats: {
+    totalEmpenhado: "R$ 150.500,00",
+    empenhosAtivos: "03",
+    ultimaAtualizacao: "Hoje, 12:45",
+  },
+  empenhos: [
+    {
+      id: "1",
+      numeroEmpenho: "2024NE000123",
+      dataEmissao: "15/03/2024",
+      valorOriginal: "150.500,00",
+      processo: "23000.123456/2024-12",
+      elemento: "30 - Material de Consumo",
+      observacao: "AQUISIÇÃO DE EQUIPAMENTOS...",
+      favorecido: {
+        nome: "EMPRESA DE DEMONSTRAÇÃO S.A.",
+        cnpjFormatado: "12.345.678/0001-00",
+      },
+      unidadeGestora: {
+        nome: "CENTRO DE INTENDENCIA DA MARINHA EM MANAUS",
+        orgaoSuperior: "Ministério da Defesa",
+      },
+    },
+  ],
+  contratos: [
+    {
+      id: "c1",
+      numero: "102014",
+      objeto: "Contratação de empresa especializada...",
+      dataAssinatura: "23/05/2014",
+      vigencia: "23/05/2014 até 22/05/2015",
+      valorFinal: "14.828,00",
+      situacao: "Publicado",
+      orgao: "IFAM - CAMPUS MANAUS CENTRO",
+    },
+  ],
+};
