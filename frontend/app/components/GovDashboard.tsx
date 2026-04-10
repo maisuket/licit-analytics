@@ -36,11 +36,15 @@ export function GovDashboard() {
       setGovData(data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "";
-      setError(
-        message === "EMPRESA_NAO_ENCONTRADA"
-          ? "Não foram encontrados dados públicos para este CNPJ no Portal da Transparência."
-          : "Ocorreu um erro ao consultar a API Governamental.",
-      );
+      if (message === "EMPRESA_NAO_ENCONTRADA") {
+        setError(
+          "Não foram encontrados dados públicos para este CNPJ no Portal da Transparência.",
+        );
+      } else if (message === "UNAUTHENTICATED") {
+        setError("Sessão expirada. Por favor, faça login novamente.");
+      } else {
+        setError(message || "Ocorreu um erro ao consultar a API Governamental.");
+      }
     } finally {
       setIsLoading(false);
     }
