@@ -16,6 +16,7 @@ import {
   Building,
   ReceiptText,
   Activity,
+  ShieldCheck,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -71,6 +72,7 @@ export default function OperationControl({
   const [isProcessingStatus, setIsProcessingStatus] = useState<string | null>(
     null,
   );
+  const [nfInput, setNfInput] = useState("");
 
   // Referências para Upload de Ficheiros
   const fileInputEmpenho = useRef<HTMLInputElement>(null);
@@ -228,15 +230,17 @@ export default function OperationControl({
   };
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
+    if (newStatus === "FATURADO" && !nfInput.trim()) {
+      toast.error("Informe o número da Nota Fiscal antes de avançar.");
+      return;
+    }
     setIsProcessingStatus(id);
     const toastId = toast.loading("A atualizar estado da O.S...");
     try {
-      const mockNF =
-        newStatus === "FATURADO"
-          ? Math.floor(Math.random() * 90000 + 10000).toString()
-          : undefined;
-      await ApiService.updateOsStatus(id, newStatus, mockNF);
+      const nf = newStatus === "FATURADO" ? nfInput.trim() : undefined;
+      await ApiService.updateOsStatus(id, newStatus, nf);
       toast.success(`O.S. movida para ${newStatus}!`, { id: toastId });
+      setNfInput("");
       await loadErpData();
       setSelectedOs(null);
     } catch (error: any) {
@@ -1011,20 +1015,34 @@ export default function OperationControl({
                   {/* Ações de Estado */}
                   <div className="pt-2">
                     {selectedOs.status === "AGUARDANDO" && (
-                      <button
-                        onClick={() =>
-                          handleStatusUpdate(selectedOs.id, "FATURADO")
-                        }
-                        disabled={isProcessingStatus === selectedOs.id}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-70"
-                      >
-                        {isProcessingStatus === selectedOs.id ? (
-                          <Loader2 size={18} className="animate-spin" />
-                        ) : (
-                          <FileText size={18} />
-                        )}
-                        Emitir Nota Fiscal (Avançar para Faturado)
-                      </button>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                            Nº da Nota Fiscal
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ex: 000123"
+                            value={nfInput}
+                            onChange={(e) => setNfInput(e.target.value)}
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm font-mono"
+                          />
+                        </div>
+                        <button
+                          onClick={() =>
+                            handleStatusUpdate(selectedOs.id, "FATURADO")
+                          }
+                          disabled={isProcessingStatus === selectedOs.id || !nfInput.trim()}
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isProcessingStatus === selectedOs.id ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <FileText size={18} />
+                          )}
+                          Emitir Nota Fiscal (Avançar para Faturado)
+                        </button>
+                      </div>
                     )}
                     {selectedOs.status === "FATURADO" && (
                       <div className="text-center p-3 bg-white border border-blue-100 rounded-xl">

@@ -12,6 +12,7 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,7 +21,9 @@ import {
   ApiParam,
   ApiBody,
   ApiConsumes,
+  ApiProduces,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { OperationService } from './operation.service';
 import {
   CreateServiceOrderDto,
@@ -77,6 +80,21 @@ export class OperationController {
   @ApiParam({ name: 'id', description: 'ID da O.S.' })
   remove(@Param('id') id: string) {
     return this.operationService.remove(id);
+  }
+
+  @Get('os/:id/pdf')
+  @ApiOperation({ summary: 'Gera e retorna o boletim PDF de uma O.S.' })
+  @ApiParam({ name: 'id', description: 'ID da O.S.' })
+  @ApiProduces('application/pdf')
+  @ApiResponse({ status: HttpStatus.OK, description: 'PDF gerado com sucesso.' })
+  async downloadPdf(@Param('id') id: string, @Res() res: Response) {
+    const buffer = await this.operationService.generateOsPdf(id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="OS_${id}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 
   @Post('import-csv/:cnpj/:type')

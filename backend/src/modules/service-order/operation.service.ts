@@ -174,7 +174,7 @@ export class OperationService {
           });
         }
 
-        const rawStatus = (this.getCol(row, ['SITUCAO', 'STATUS', 'SITUACAO']) ?? '')
+        const rawStatus = (this.getCol(row, ['SITUACAO', 'STATUS']) ?? '')
           .toUpperCase()
           .trim();
         let status: OsStatus = OsStatus.AGUARDANDO;
