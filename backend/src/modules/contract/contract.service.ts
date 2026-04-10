@@ -1,5 +1,4 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/infra/database/prisma.service';
 import { CompanyService } from '../company/company.service';
 import {
@@ -74,7 +73,7 @@ export class ContractService {
     if (allRawContracts.length === 0) return { count: 0 };
 
     // Mapeia RawContractData para o formato esperado pelo Prisma
-    const contractsToCreate: Prisma.ContractCreateManyInput[] = allRawContracts.map((raw) => ({
+    const contractsToCreate: any[] = allRawContracts.map((raw) => ({
       companyId: company.id,
       numero: raw.numero,
       objeto: raw.objeto,
@@ -93,9 +92,9 @@ export class ContractService {
     );
 
     // Transação: Deleta os antigos e insere todos os novos de uma vez
-    await this.prisma.$transaction(async (prisma) => {
-      await prisma.contract.deleteMany({ where: { companyId: company.id } });
-      await prisma.contract.createMany({ data: contractsToCreate });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.contract.deleteMany({ where: { companyId: company.id } });
+      await tx.contract.createMany({ data: contractsToCreate });
     });
 
     return { count: contractsToCreate.length };
@@ -109,7 +108,7 @@ export class ContractService {
     const skip = (page - 1) * limit;
 
     // 2. Construção da cláusula de filtro (garantindo que pertence à empresa alvo)
-    const where: Prisma.ContractWhereInput = { companyId: company.id };
+    const where: any = { companyId: company.id };
 
     if (search) {
       where.OR = [

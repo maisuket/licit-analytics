@@ -33,10 +33,14 @@ export class TransparencyApiProvider implements IDataProvider {
   ): Promise<RawExpenseData[]> {
     const apiKey = this.configService.get<string>('PORTAL_API_KEY');
     if (!apiKey) {
-      throw new HttpException('API Key ausente.', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'API Key ausente.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
-    const faseName = fase === 1 ? 'EMPENHOS' : fase === 2 ? 'LIQUIDAÇÕES' : 'PAGAMENTOS';
+    const faseName =
+      fase === 1 ? 'EMPENHOS' : fase === 2 ? 'LIQUIDAÇÕES' : 'PAGAMENTOS';
 
     try {
       this.logger.log(
@@ -44,10 +48,13 @@ export class TransparencyApiProvider implements IDataProvider {
       );
 
       const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/despesas/documentos-por-favorecido`, {
-          params: { codigoPessoa: cnpj, ano: year, fase, pagina },
-          headers: { 'chave-api-dados': apiKey },
-        }),
+        this.httpService.get(
+          `${this.baseUrl}/despesas/documentos-por-favorecido`,
+          {
+            params: { codigoPessoa: cnpj, ano: year, fase, pagina },
+            headers: { 'chave-api-dados': apiKey },
+          },
+        ),
       );
 
       const data: unknown = response.data;
@@ -57,22 +64,28 @@ export class TransparencyApiProvider implements IDataProvider {
       // `string | undefined`, não `string | null` (padrão TypeScript sem DB null)
       return (data as Record<string, unknown>[]).map((item) => ({
         orgao: (item['orgao'] as string) || 'ÓRGÃO NÃO IDENTIFICADO',
-        orgaoSuperior: (item['orgaoSuperior'] as string | undefined) || undefined,
+        orgaoSuperior:
+          (item['orgaoSuperior'] as string | undefined) || undefined,
         unidadeGestora: (item['ug'] as string | undefined) || undefined,
         tipo: DESPESA_FASE_MAP[fase],
-        valor: this.parseGovernmentValue(item['valor'] as string | number | undefined),
+        valor: this.parseGovernmentValue(
+          item['valor'] as string | number | undefined,
+        ),
         data: this.parseGovernmentDate(item['data'] as string | undefined),
         descricao: (item['observacao'] as string) || 'SEM DESCRIÇÃO',
         numeroDocumento:
           (item['documentoResumido'] as string) ||
           (item['documento'] as string) ||
           'S/N',
-        numeroProcesso: (item['numeroProcesso'] as string | undefined) || undefined,
+        numeroProcesso:
+          (item['numeroProcesso'] as string | undefined) || undefined,
         elementoDespesa: (item['elemento'] as string | undefined) || undefined,
       }));
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Erro ao buscar ${faseName} (Página ${pagina}): ${msg}`);
+      this.logger.error(
+        `Erro ao buscar ${faseName} (Página ${pagina}): ${msg}`,
+      );
       return [];
     }
   }
@@ -121,8 +134,12 @@ export class TransparencyApiProvider implements IDataProvider {
       if (!Array.isArray(data)) return [];
 
       return (data as Record<string, unknown>[]).map((item) => {
-        const ug = item['unidadeGestora'] as Record<string, unknown> | undefined;
-        const orgaoMaximo = ug?.['orgaoMaximo'] as Record<string, unknown> | undefined;
+        const ug = item['unidadeGestora'] as
+          | Record<string, unknown>
+          | undefined;
+        const orgaoMaximo = ug?.['orgaoMaximo'] as
+          | Record<string, unknown>
+          | undefined;
 
         return {
           numero: (item['numero'] as string) || 'S/N',
@@ -147,6 +164,57 @@ export class TransparencyApiProvider implements IDataProvider {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(`Erro ao buscar contratos na página ${pagina}: ${msg}`);
       return [];
+    }
+  }
+
+  private async fetchWithRetry(
+    url: string,
+    options: RequestInit,
+    maxRetries = 3,
+  ): Promise<any> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, options);
+
+        if (!response.ok) {
+          // Se for erro 429 (Too Many Requests), disparamos erro para forçar o retry
+          if (response.status === 429) {
+            this.logger.warn(`Rate limit atingido (429) na API. URL: ${url}`);
+            throw new HttpException(
+              'Rate limit exceeded',
+              HttpStatus.TOO_MANY_REQUESTS,
+            );
+          }
+          throw new HttpException(
+            `Erro na API do Portal: ${response.statusText}`,
+            response.status,
+          );
+        }
+
+        return await response.json();
+      } catch (error) {
+        // Se não for erro de Rate Limit ou já atingiu o máximo de tentativas, interrompe
+        if (
+          attempt === maxRetries ||
+          !(
+            error instanceof HttpException &&
+            error.getStatus() === HttpStatus.TOO_MANY_REQUESTS
+          )
+        ) {
+          this.logger.error(
+            `Falha definitiva após ${attempt} tentativas na URL: ${url}`,
+            error,
+          );
+          throw error;
+        }
+
+        // Exponential backoff: 2s, 4s, 8s...
+        const delay = Math.pow(2, attempt) * 1000;
+        this.logger.warn(
+          `Tentativa ${attempt} falhou. Aguardando ${delay}ms para tentar novamente...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
   }
 }
