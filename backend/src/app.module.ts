@@ -8,6 +8,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import * as path from 'path';
 import * as Joi from 'joi';
 
 // Infraestrutura
@@ -29,7 +30,14 @@ import { HealthModule } from './modules/health/health.module';
     // 1. Configuração de Ambiente — falha no boot se variável obrigatória faltar
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      // Resolve o .env sempre em relação ao diretório raiz do pacote backend/,
+      // independente de onde o processo foi iniciado (IDE, Docker, projeto raiz).
+      // __dirname aponta para src/ (ts-node) ou dist/ (compilado) — ambos têm
+      // o .env um nível acima.
+      envFilePath: [
+        path.join(__dirname, '..', '.env'),  // dist/../.env  ou  src/../.env  → backend/.env
+        '.env',                               // fallback: CWD/.env
+      ],
       validationSchema: Joi.object({
         PORT: Joi.number().default(3000),
         FRONTEND_URL: Joi.string().required(),
