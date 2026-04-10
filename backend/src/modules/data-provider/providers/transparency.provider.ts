@@ -32,7 +32,7 @@ export class TransparencyApiProvider implements IDataProvider {
     fase: DespesaFase = 1,
     pagina: number = 1,
   ): Promise<RawExpenseData[]> {
-    const apiKey = this.configService.get<string>('PORTAL_API_KEY');
+    const apiKey = this.configService.get<string>('TRANSPARENCY_API_KEY');
     if (!apiKey) {
       throw new HttpException(
         'API Key ausente.',
@@ -114,7 +114,7 @@ export class TransparencyApiProvider implements IDataProvider {
   }
 
   async fetchContractsByCnpj(cnpj: string, pagina: number = 1): Promise<RawContractData[]> {
-    const apiKey = this.configService.get<string>('PORTAL_API_KEY');
+    const apiKey = this.configService.get<string>('TRANSPARENCY_API_KEY');
     if (!apiKey) {
       throw new HttpException(
         'API Key ausente.',

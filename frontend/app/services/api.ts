@@ -121,11 +121,9 @@ export class ApiService {
         `${API_V1}/analysis/dashboard/${clean}`,
       );
     } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.message === "EMPRESA_NAO_ENCONTRADA" ||
-          error.message === "UNAUTHENTICATED")
-      ) {
+      // Erros HTTP do backend (4xx/5xx) devem ser propagados — o fallback
+      // para demo só ocorre quando o backend está genuinamente offline (TypeError).
+      if (!(error instanceof TypeError)) {
         throw error;
       }
       console.warn("Backend inacessível. Retornando dados de demonstração.", error);
