@@ -6,6 +6,7 @@ import { TipoDespesa } from '@prisma/client';
 import {
   IDataProvider,
   RawExpenseData,
+  RawContractData,
   DespesaFase,
   DESPESA_FASE_MAP,
 } from '../interfaces/data-provider.interface';
@@ -112,8 +113,14 @@ export class TransparencyApiProvider implements IDataProvider {
     return new Date(`${year}-${month}-${day}T12:00:00Z`);
   }
 
-  async fetchContractsByCnpj(cnpj: string, pagina: number = 1): Promise<any[]> {
+  async fetchContractsByCnpj(cnpj: string, pagina: number = 1): Promise<RawContractData[]> {
     const apiKey = this.configService.get<string>('PORTAL_API_KEY');
+    if (!apiKey) {
+      throw new HttpException(
+        'API Key ausente.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
     try {
       this.logger.log(
@@ -133,7 +140,7 @@ export class TransparencyApiProvider implements IDataProvider {
       const data: unknown = response.data;
       if (!Array.isArray(data)) return [];
 
-      return (data as Record<string, unknown>[]).map((item) => {
+      return (data as Record<string, unknown>[]).map((item): RawContractData => {
         const ug = item['unidadeGestora'] as
           | Record<string, unknown>
           | undefined;
@@ -167,54 +174,4 @@ export class TransparencyApiProvider implements IDataProvider {
     }
   }
 
-  private async fetchWithRetry(
-    url: string,
-    options: RequestInit,
-    maxRetries = 3,
-  ): Promise<any> {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await fetch(url, options);
-
-        if (!response.ok) {
-          // Se for erro 429 (Too Many Requests), disparamos erro para forçar o retry
-          if (response.status === 429) {
-            this.logger.warn(`Rate limit atingido (429) na API. URL: ${url}`);
-            throw new HttpException(
-              'Rate limit exceeded',
-              HttpStatus.TOO_MANY_REQUESTS,
-            );
-          }
-          throw new HttpException(
-            `Erro na API do Portal: ${response.statusText}`,
-            response.status,
-          );
-        }
-
-        return await response.json();
-      } catch (error) {
-        // Se não for erro de Rate Limit ou já atingiu o máximo de tentativas, interrompe
-        if (
-          attempt === maxRetries ||
-          !(
-            error instanceof HttpException &&
-            error.getStatus() === HttpStatus.TOO_MANY_REQUESTS
-          )
-        ) {
-          this.logger.error(
-            `Falha definitiva após ${attempt} tentativas na URL: ${url}`,
-            error,
-          );
-          throw error;
-        }
-
-        // Exponential backoff: 2s, 4s, 8s...
-        const delay = Math.pow(2, attempt) * 1000;
-        this.logger.warn(
-          `Tentativa ${attempt} falhou. Aguardando ${delay}ms para tentar novamente...`,
-        );
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-  }
 }
