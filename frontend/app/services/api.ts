@@ -12,21 +12,46 @@ import {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 const API_V1 = `${API_BASE_URL}/api/v1`;
 
+const TOKEN_KEY = "licit_token";
+
 // ---------------------------------------------------------------------------
 // Helper: desempacota o envelope { success, data } retornado pelo backend
 // ---------------------------------------------------------------------------
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
+  const token = ApiService.getToken();
+
+  const headers: Record<string, string> = {
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  // Não sobrescreve Content-Type quando o body é FormData
+  if (
+    options?.body &&
+    !(options.body instanceof FormData) &&
+    !headers["Content-Type"]
+  ) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const response = await fetch(url, { ...options, headers });
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({})) as Partial<ApiResponse<unknown>>;
+    // 401 — token inválido/expirado: limpa a sessão e sinaliza para redirecionar
+    if (response.status === 401) {
+      ApiService.clearToken();
+      throw new Error("UNAUTHENTICATED");
+    }
+
+    const err = (await response
+      .json()
+      .catch(() => ({}))) as Partial<ApiResponse<unknown>>;
     const message = err?.error?.message ?? "Erro na requisição.";
     throw new Error(
       response.status === 404 ? "EMPRESA_NAO_ENCONTRADA" : message,
     );
   }
 
-  const json = await response.json() as ApiResponse<T> | T;
+  const json = (await response.json()) as ApiResponse<T> | T;
 
   // Suporte ao envelope { success, data } e resposta direta (fallback)
   if (json !== null && typeof json === "object" && "success" in json) {
@@ -39,6 +64,54 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 // ApiService
 // ---------------------------------------------------------------------------
 export class ApiService {
+  // ── AUTENTICAÇÃO ─────────────────────────────────────────────────────────
+
+  static getToken(): string | null {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(TOKEN_KEY);
+  }
+
+  static setToken(token: string): void {
+    localStorage.setItem(TOKEN_KEY, token);
+  }
+
+  static clearToken(): void {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+
+  static isAuthenticated(): boolean {
+    return !!ApiService.getToken();
+  }
+
+  static async login(
+    email: string,
+    password: string,
+  ): Promise<{ accessToken: string; user: { name: string; email: string; role: string } }> {
+    const response = await fetch(`${API_V1}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const json = (await response.json().catch(() => ({}))) as
+      | ApiResponse<{ accessToken: string; user: { name: string; email: string; role: string } }>
+      | { accessToken: string; user: { name: string; email: string; role: string } };
+
+    if (!response.ok) {
+      const err = json as Partial<ApiResponse<unknown>>;
+      throw new Error(err?.error?.message ?? "Credenciais inválidas.");
+    }
+
+    // Desempacota o envelope se presente
+    const data =
+      "success" in json
+        ? (json as ApiResponse<{ accessToken: string; user: { name: string; email: string; role: string } }>).data
+        : (json as { accessToken: string; user: { name: string; email: string; role: string } });
+
+    ApiService.setToken(data.accessToken);
+    return data;
+  }
+
   // ── GOV INTELLIGENCE ────────────────────────────────────────────────────
 
   static async getDashboard(cnpj: string): Promise<DashboardResponse> {
@@ -48,7 +121,11 @@ export class ApiService {
         `${API_V1}/analysis/dashboard/${clean}`,
       );
     } catch (error) {
-      if (error instanceof Error && error.message === "EMPRESA_NAO_ENCONTRADA") {
+      if (
+        error instanceof Error &&
+        (error.message === "EMPRESA_NAO_ENCONTRADA" ||
+          error.message === "UNAUTHENTICATED")
+      ) {
         throw error;
       }
       console.warn("Backend inacessível. Retornando dados de demonstração.", error);
@@ -77,6 +154,7 @@ export class ApiService {
         body: JSON.stringify({ cnpj: clean, year }),
       });
     } catch (error) {
+      if (error instanceof Error && error.message === "UNAUTHENTICATED") throw error;
       console.warn("Simulando importação — backend inacessível.", error);
       return { message: "Simulação de importação iniciada.", jobId: "simulated-job-123" };
     }
@@ -90,23 +168,18 @@ export class ApiService {
     contratos: ErpContract[];
   }> {
     const clean = cnpj.replace(/\D/g, "");
-    try {
-      const [empRes, osRes, contRes] = await Promise.all([
-        fetchJson<{ data: ErpExpense[] }>(`${API_V1}/expense/${clean}?limit=100`),
-        fetchJson<{ data: ErpServiceOrder[] }>(`${API_V1}/operation/os?limit=100`),
-        fetchJson<{ data: ErpContract[] }>(`${API_V1}/contract/${clean}?limit=100`).catch(
-          () => ({ data: [] as ErpContract[] }),
-        ),
-      ]);
-      return {
-        empenhos: empRes.data ?? [],
-        ordens: osRes.data ?? [],
-        contratos: contRes.data ?? [],
-      };
-    } catch (e) {
-      console.error("Erro no getErpData:", e);
-      return { empenhos: [], ordens: [], contratos: [] };
-    }
+    const [empRes, osRes, contRes] = await Promise.all([
+      fetchJson<{ data: ErpExpense[] }>(`${API_V1}/expense/${clean}?limit=100`),
+      fetchJson<{ data: ErpServiceOrder[] }>(`${API_V1}/operation/os?limit=100`),
+      fetchJson<{ data: ErpContract[] }>(
+        `${API_V1}/contract/${clean}?limit=100`,
+      ).catch(() => ({ data: [] as ErpContract[] })),
+    ]);
+    return {
+      empenhos: empRes.data ?? [],
+      ordens: osRes.data ?? [],
+      contratos: contRes.data ?? [],
+    };
   }
 
   static async createServiceOrder(

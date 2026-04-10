@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,6 +42,13 @@ export default function RootLayout({
         <ErrorBoundary>
           <main className="flex-grow">{children}</main>
         </ErrorBoundary>
+        <Toaster
+          position="bottom-right"
+          toastOptions={{
+            duration: 4000,
+            style: { fontSize: "14px" },
+          }}
+        />
       </body>
     </html>
   );
