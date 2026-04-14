@@ -216,11 +216,14 @@ export class ApiService {
     );
   }
 
-  static async syncContracts(cnpj: string): Promise<{ count: number }> {
+  static async syncContracts(
+    cnpj: string,
+  ): Promise<{ count: number; linked: number }> {
     const clean = cnpj.replace(/\D/g, "");
-    return fetchJson<{ count: number }>(`${API_V1}/contract/sync/${clean}`, {
-      method: "POST",
-    });
+    return fetchJson<{ count: number; linked: number }>(
+      `${API_V1}/contract/sync/${clean}`,
+      { method: "POST" },
+    );
   }
 }
 

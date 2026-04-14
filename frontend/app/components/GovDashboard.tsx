@@ -9,17 +9,18 @@ import {
   FileText,
   Clock,
   AlertCircle,
+  RefreshCw,
+  Link2,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import { DashboardResponse } from "../types/dashboard";
 import { ApiService } from "../services/api";
-
-// Assumindo que a classe ApiService está acessível neste ficheiro, ou importe-a:
-// import { ApiService } from "../services/api";
 
 export function GovDashboard() {
   const [searchCnpj, setSearchCnpj] = useState("");
   const [govData, setGovData] = useState<DashboardResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -47,6 +48,26 @@ export function GovDashboard() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSync = async () => {
+    if (!searchCnpj || searchCnpj.length < 14) return;
+    setIsSyncing(true);
+    const toastId = toast.loading(
+      "Sincronizando contratos e vinculando empenhos...",
+    );
+    try {
+      const result = await ApiService.syncContracts(searchCnpj);
+      toast.success(
+        `${result.count} contrato(s) importado(s) · ${result.linked} empenho(s) vinculado(s)`,
+        { id: toastId, duration: 6000 },
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro desconhecido";
+      toast.error(`Falha na sincronização: ${message}`, { id: toastId });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -97,6 +118,34 @@ export function GovDashboard() {
               Investigar
             </button>
           </form>
+
+          {/* Botão de Sincronização — aparece após uma busca bem-sucedida */}
+          {govData && (
+            <div className="mt-4 flex items-center gap-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-indigo-800 flex items-center gap-1.5">
+                  <Link2 size={14} /> Salvar no ERP e vincular empenhos
+                </p>
+                <p className="text-xs text-indigo-500 mt-0.5">
+                  Importa todos os contratos deste CNPJ e correlaciona automaticamente os empenhos vinculados.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSync}
+                disabled={isSyncing || searchCnpj.length < 14}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-all shadow-sm shrink-0"
+              >
+                {isSyncing ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={16} />
+                )}
+                Sincronizar
+              </button>
+            </div>
+          )}
+
           {error && (
             <div className="mt-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm flex items-center gap-2 border border-red-100">
               <AlertCircle size={16} /> {error}
