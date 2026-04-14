@@ -7,7 +7,9 @@ import {
   RawContractData,
 } from '../data-provider/interfaces/data-provider.interface';
 // `import type` necessário por causa de isolatedModules + emitDecoratorMetadata
-import type { IDataProvider } from '../data-provider/interfaces/data-provider.interface';
+import type {
+  IDataProvider,
+} from '../data-provider/interfaces/data-provider.interface';
 import { QueryContractDto } from './dto/query-contract.dto';
 
 @Injectable()
@@ -71,11 +73,12 @@ export class ContractService {
     }
 
     // Se não encontrou contratos em nenhuma página, encerra.
-    if (allRawContracts.length === 0) return { count: 0 };
+    if (allRawContracts.length === 0) return { count: 0, linked: 0 };
 
     // Mapeia RawContractData para o formato esperado pelo Prisma
     const contractsToCreate: Prisma.ContractCreateManyInput[] = allRawContracts.map((raw) => ({
       companyId: company.id,
+      externalId: raw.id > 0 ? raw.id : null,
       numero: raw.numero,
       objeto: raw.objeto,
       dataAssinatura: raw.dataAssinatura,
@@ -98,7 +101,67 @@ export class ContractService {
       await tx.contract.createMany({ data: contractsToCreate });
     });
 
-    return { count: contractsToCreate.length };
+    // ─── Etapa 2: Vincular empenhos aos contratos via documentos relacionados ───
+    this.logger.log(
+      `Iniciando vinculação de empenhos via documentos relacionados...`,
+    );
+
+    const savedContracts = await this.prisma.contract.findMany({
+      where: { companyId: company.id, externalId: { not: null } },
+      select: { id: true, externalId: true },
+    });
+
+    let linkedCount = 0;
+
+    for (const contract of savedContracts) {
+      if (!contract.externalId) continue;
+
+      let docPage = 1;
+      let hasMoreDocs = true;
+
+      while (hasMoreDocs) {
+        const documents = await this.dataProvider.fetchContractDocuments(
+          contract.externalId,
+          docPage,
+        );
+
+        if (!documents || documents.length === 0) {
+          hasMoreDocs = false;
+          break;
+        }
+
+        for (const doc of documents) {
+          if (!doc.empenhoResumido) continue;
+
+          // Correlação exata pelo número resumido do empenho
+          const updated = await this.prisma.expense.updateMany({
+            where: {
+              companyId: company.id,
+              numeroDocumento: doc.empenhoResumido,
+              contractId: null, // Não sobrescreve vínculos já existentes
+            },
+            data: {
+              contractId: contract.id,
+              correlationScore: 1.0,
+              correlationStrategy: 'exact_document',
+            },
+          });
+
+          linkedCount += updated.count;
+        }
+
+        docPage++;
+        await this.sleep(500); // Throttle entre chamadas de documentos
+      }
+
+      await this.sleep(500); // Throttle entre contratos
+    }
+
+    this.logger.log(
+      `Vinculação concluída: ${linkedCount} empenho(s) correlacionado(s) a contratos.`,
+    );
+
+    return { count: contractsToCreate.length, linked: linkedCount };
   }
 
   async findByCompanyCnpj(cnpj: string, query: QueryContractDto) {

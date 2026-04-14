@@ -24,6 +24,8 @@ export interface RawExpenseData {
 }
 
 export interface RawContractData {
+  /** ID numérico retornado pela API do Portal (ex: 123456). Usado para buscar documentos relacionados. */
+  id: number;
   numero: string;
   objeto: string;
   dataAssinatura: Date | null;
@@ -34,6 +36,20 @@ export interface RawContractData {
   situacao: string;
   unidadeGestora: string;
   orgaoSuperior: string | null;
+}
+
+/**
+ * Representa um documento (empenho) vinculado a um contrato,
+ * retornado pelo endpoint GET /contratos/documentos-relacionados?id={id}.
+ */
+export interface RawContractDocument {
+  /** Número completo do empenho (ex: "2024NE000503") */
+  empenho: string;
+  /** Número resumido do empenho — chave de correlação com Expense.numeroDocumento */
+  empenhoResumido: string;
+  dataEmissao: string | null;
+  observacao: string | null;
+  valor: number;
 }
 
 export const DATA_PROVIDER_TOKEN = Symbol('DATA_PROVIDER');
@@ -58,4 +74,13 @@ export interface IDataProvider {
     cnpj: string,
     pagina?: number,
   ): Promise<RawContractData[]>;
+
+  /**
+   * Busca os documentos de empenho vinculados a um contrato pelo seu ID numérico.
+   * Endpoint: GET /contratos/documentos-relacionados?id={contractId}
+   */
+  fetchContractDocuments(
+    contractId: number,
+    pagina?: number,
+  ): Promise<RawContractDocument[]>;
 }

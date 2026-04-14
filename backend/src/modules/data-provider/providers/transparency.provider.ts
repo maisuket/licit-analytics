@@ -7,6 +7,7 @@ import {
   IDataProvider,
   RawExpenseData,
   RawContractData,
+  RawContractDocument,
   DespesaFase,
   DESPESA_FASE_MAP,
 } from '../interfaces/data-provider.interface';
@@ -149,6 +150,7 @@ export class TransparencyApiProvider implements IDataProvider {
           | undefined;
 
         return {
+          id: (item['id'] as number) || 0,
           numero: (item['numero'] as string) || 'S/N',
           objeto: (item['objeto'] as string) || 'SEM DESCRIÇÃO',
           dataAssinatura: item['dataAssinatura']
@@ -170,6 +172,60 @@ export class TransparencyApiProvider implements IDataProvider {
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(`Erro ao buscar contratos na página ${pagina}: ${msg}`);
+      return [];
+    }
+  }
+
+  /**
+   * Busca os documentos (empenhos) vinculados a um contrato pelo seu ID numérico.
+   * Endpoint: GET /contratos/documentos-relacionados?id={contractId}
+   */
+  async fetchContractDocuments(
+    contractId: number,
+    pagina: number = 1,
+  ): Promise<RawContractDocument[]> {
+    const apiKey = this.configService.get<string>('TRANSPARENCY_API_KEY');
+    if (!apiKey) {
+      throw new HttpException(
+        'API Key ausente.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    try {
+      this.logger.log(
+        `Buscando documentos relacionados ao contrato ID: ${contractId} | Página: ${pagina}`,
+      );
+
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${this.baseUrl}/contratos/documentos-relacionados`,
+          {
+            params: { id: contractId, pagina },
+            headers: { 'chave-api-dados': apiKey },
+          },
+        ),
+      );
+
+      const data: unknown = response.data;
+      if (!Array.isArray(data)) return [];
+
+      return (data as Record<string, unknown>[]).map(
+        (item): RawContractDocument => ({
+          empenho: (item['empenho'] as string) || '',
+          empenhoResumido: (item['empenhoResumido'] as string) || '',
+          dataEmissao: (item['dataEmissao'] as string | null) ?? null,
+          observacao: (item['observacao'] as string | null) ?? null,
+          valor: this.parseGovernmentValue(
+            item['valor'] as string | number | undefined,
+          ),
+        }),
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Erro ao buscar documentos do contrato ${contractId} (Página ${pagina}): ${msg}`,
+      );
       return [];
     }
   }
