@@ -35,8 +35,8 @@ import { HealthModule } from './modules/health/health.module';
       // __dirname aponta para src/ (ts-node) ou dist/ (compilado) — ambos têm
       // o .env um nível acima.
       envFilePath: [
-        path.join(__dirname, '..', '.env'),  // dist/../.env  ou  src/../.env  → backend/.env
-        '.env',                               // fallback: CWD/.env
+        path.join(__dirname, '..', '.env'), // dist/../.env  ou  src/../.env  → backend/.env
+        '.env', // fallback: CWD/.env
       ],
       validationSchema: Joi.object({
         PORT: Joi.number().default(3000),

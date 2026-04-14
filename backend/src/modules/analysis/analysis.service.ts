@@ -292,7 +292,9 @@ export class AnalysisService {
    *
    * Se ainda houver empenhos sem contractId, executa a correlação automática antes.
    */
-  async getContractTimeline(cnpj: string): Promise<ContractTimelineResponseDto> {
+  async getContractTimeline(
+    cnpj: string,
+  ): Promise<ContractTimelineResponseDto> {
     this.logger.log(`Construindo contract-timeline para CNPJ: ${cnpj}`);
 
     const company = await this.companyService.findByCnpj(cnpj);
@@ -329,61 +331,63 @@ export class AnalysisService {
       where: { companyId: company.id },
     });
 
-    const contratosDto: ContractTimelineItemDto[] = contracts.map((contract) => {
-      const empenhos = contract.expenses.filter(
-        (e) => e.tipo === TipoDespesa.EMPENHO,
-      );
-      const liquidacoes = contract.expenses.filter(
-        (e) => e.tipo === TipoDespesa.LIQUIDACAO,
-      );
-      const pagamentos = contract.expenses.filter(
-        (e) => e.tipo === TipoDespesa.PAGAMENTO,
-      );
+    const contratosDto: ContractTimelineItemDto[] = contracts.map(
+      (contract) => {
+        const empenhos = contract.expenses.filter(
+          (e) => e.tipo === TipoDespesa.EMPENHO,
+        );
+        const liquidacoes = contract.expenses.filter(
+          (e) => e.tipo === TipoDespesa.LIQUIDACAO,
+        );
+        const pagamentos = contract.expenses.filter(
+          (e) => e.tipo === TipoDespesa.PAGAMENTO,
+        );
 
-      const totalEmpenhado = empenhos.reduce(
-        (acc, e) => acc + Number(e.valorOriginal),
-        0,
-      );
-      const totalLiquidado = liquidacoes.reduce(
-        (acc, e) => acc + Number(e.valorOriginal),
-        0,
-      );
-      const totalPago = pagamentos.reduce(
-        (acc, e) => acc + Number(e.valorOriginal),
-        0,
-      );
+        const totalEmpenhado = empenhos.reduce(
+          (acc, e) => acc + Number(e.valorOriginal),
+          0,
+        );
+        const totalLiquidado = liquidacoes.reduce(
+          (acc, e) => acc + Number(e.valorOriginal),
+          0,
+        );
+        const totalPago = pagamentos.reduce(
+          (acc, e) => acc + Number(e.valorOriginal),
+          0,
+        );
 
-      const resumoFinanceiro: ContractTimelineFinancialSummaryDto = {
-        totalEmpenhado,
-        totalLiquidado,
-        totalPago,
-        saldoAReceber: totalEmpenhado - totalPago,
-        percentualLiquidado:
-          totalEmpenhado > 0
-            ? Math.min(1, totalLiquidado / totalEmpenhado)
-            : 0,
-        percentualPago:
-          totalEmpenhado > 0 ? Math.min(1, totalPago / totalEmpenhado) : 0,
-      };
+        const resumoFinanceiro: ContractTimelineFinancialSummaryDto = {
+          totalEmpenhado,
+          totalLiquidado,
+          totalPago,
+          saldoAReceber: totalEmpenhado - totalPago,
+          percentualLiquidado:
+            totalEmpenhado > 0
+              ? Math.min(1, totalLiquidado / totalEmpenhado)
+              : 0,
+          percentualPago:
+            totalEmpenhado > 0 ? Math.min(1, totalPago / totalEmpenhado) : 0,
+        };
 
-      return {
-        id: contract.id,
-        numero: contract.numero,
-        objeto: contract.objeto,
-        dataAssinatura: contract.dataAssinatura,
-        dataInicioVigencia: contract.dataInicioVigencia,
-        dataFimVigencia: contract.dataFimVigencia,
-        valorInicial: Number(contract.valorInicial),
-        valorFinal: Number(contract.valorFinal),
-        situacao: contract.situacao,
-        unidadeGestora: contract.unidadeGestora,
-        orgaoSuperior: contract.orgaoSuperior,
-        resumoFinanceiro,
-        empenhos: empenhos.map(this.mapExpenseToTimelineItem),
-        liquidacoes: liquidacoes.map(this.mapExpenseToTimelineItem),
-        pagamentos: pagamentos.map(this.mapExpenseToTimelineItem),
-      };
-    });
+        return {
+          id: contract.id,
+          numero: contract.numero,
+          objeto: contract.objeto,
+          dataAssinatura: contract.dataAssinatura,
+          dataInicioVigencia: contract.dataInicioVigencia,
+          dataFimVigencia: contract.dataFimVigencia,
+          valorInicial: Number(contract.valorInicial),
+          valorFinal: Number(contract.valorFinal),
+          situacao: contract.situacao,
+          unidadeGestora: contract.unidadeGestora,
+          orgaoSuperior: contract.orgaoSuperior,
+          resumoFinanceiro,
+          empenhos: empenhos.map(this.mapExpenseToTimelineItem),
+          liquidacoes: liquidacoes.map(this.mapExpenseToTimelineItem),
+          pagamentos: pagamentos.map(this.mapExpenseToTimelineItem),
+        };
+      },
+    );
 
     return {
       cnpj,

@@ -114,7 +114,10 @@ export class TransparencyApiProvider implements IDataProvider {
     return new Date(`${year}-${month}-${day}T12:00:00Z`);
   }
 
-  async fetchContractsByCnpj(cnpj: string, pagina: number = 1): Promise<RawContractData[]> {
+  async fetchContractsByCnpj(
+    cnpj: string,
+    pagina: number = 1,
+  ): Promise<RawContractData[]> {
     const apiKey = this.configService.get<string>('TRANSPARENCY_API_KEY');
     if (!apiKey) {
       throw new HttpException(
@@ -141,34 +144,37 @@ export class TransparencyApiProvider implements IDataProvider {
       const data: unknown = response.data;
       if (!Array.isArray(data)) return [];
 
-      return (data as Record<string, unknown>[]).map((item): RawContractData => {
-        const ug = item['unidadeGestora'] as
-          | Record<string, unknown>
-          | undefined;
-        const orgaoMaximo = ug?.['orgaoMaximo'] as
-          | Record<string, unknown>
-          | undefined;
+      return (data as Record<string, unknown>[]).map(
+        (item): RawContractData => {
+          const ug = item['unidadeGestora'] as
+            | Record<string, unknown>
+            | undefined;
+          const orgaoMaximo = ug?.['orgaoMaximo'] as
+            | Record<string, unknown>
+            | undefined;
 
-        return {
-          id: (item['id'] as number) || 0,
-          numero: (item['numero'] as string) || 'S/N',
-          objeto: (item['objeto'] as string) || 'SEM DESCRIÇÃO',
-          dataAssinatura: item['dataAssinatura']
-            ? new Date(`${item['dataAssinatura']}T12:00:00Z`)
-            : null,
-          dataInicioVigencia: item['dataInicioVigencia']
-            ? new Date(`${item['dataInicioVigencia']}T12:00:00Z`)
-            : null,
-          dataFimVigencia: item['dataFimVigencia']
-            ? new Date(`${item['dataFimVigencia']}T12:00:00Z`)
-            : null,
-          valorInicial: (item['valorInicialCompra'] as number) || 0,
-          valorFinal: (item['valorFinalCompra'] as number) || 0,
-          situacao: (item['situacaoContrato'] as string) || 'Desconhecida',
-          unidadeGestora: (ug?.['nome'] as string) || 'ÓRGÃO NÃO IDENTIFICADO',
-          orgaoSuperior: (orgaoMaximo?.['nome'] as string | null) ?? null,
-        };
-      });
+          return {
+            id: (item['id'] as number) || 0,
+            numero: (item['numero'] as string) || 'S/N',
+            objeto: (item['objeto'] as string) || 'SEM DESCRIÇÃO',
+            dataAssinatura: item['dataAssinatura']
+              ? new Date(`${item['dataAssinatura']}T12:00:00Z`)
+              : null,
+            dataInicioVigencia: item['dataInicioVigencia']
+              ? new Date(`${item['dataInicioVigencia']}T12:00:00Z`)
+              : null,
+            dataFimVigencia: item['dataFimVigencia']
+              ? new Date(`${item['dataFimVigencia']}T12:00:00Z`)
+              : null,
+            valorInicial: (item['valorInicialCompra'] as number) || 0,
+            valorFinal: (item['valorFinalCompra'] as number) || 0,
+            situacao: (item['situacaoContrato'] as string) || 'Desconhecida',
+            unidadeGestora:
+              (ug?.['nome'] as string) || 'ÓRGÃO NÃO IDENTIFICADO',
+            orgaoSuperior: (orgaoMaximo?.['nome'] as string | null) ?? null,
+          };
+        },
+      );
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(`Erro ao buscar contratos na página ${pagina}: ${msg}`);
@@ -229,5 +235,4 @@ export class TransparencyApiProvider implements IDataProvider {
       return [];
     }
   }
-
 }
