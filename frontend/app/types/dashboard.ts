@@ -88,6 +88,8 @@ export interface ErpServiceOrder {
 
 export interface ErpContract {
   id: string;
+  /** ID numérico no Portal da Transparência — presente após sincronização */
+  externalId?: number | null;
   numero: string;
   objeto: string;
   dataAssinatura: string | null;
