@@ -107,6 +107,8 @@ model Expense {
 model Contract {
   id                 String    @id @default(uuid())
   companyId          String
+  /// ID numérico do contrato na API do Portal da Transparência (usado para buscar documentos vinculados)
+  externalId         Int?
   numero             String    @db.VarChar(100)
   objeto             String    @db.Text
   dataAssinatura     DateTime?
@@ -123,6 +125,7 @@ model Contract {
   expenses Expense[]
 
   @@index([companyId])
+  @@index([externalId])
   @@map("contracts")
 }
 
