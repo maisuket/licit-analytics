@@ -30,7 +30,11 @@ export class ContractService {
   }
 
   async importRealContracts(cnpj: string) {
-    const company = await this.companyService.findByCnpj(cnpj);
+    // Cria a empresa se ainda não existir (mesmo fluxo do expense import)
+    const company = await this.companyService.createOrFind({
+      cnpj,
+      name: 'Empresa em Processamento',
+    });
 
     let allRawContracts: RawContractData[] = [];
     let currentPage = 1;
