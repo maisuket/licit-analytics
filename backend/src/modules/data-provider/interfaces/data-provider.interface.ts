@@ -78,9 +78,7 @@ export interface IDataProvider {
   /**
    * Busca os documentos de empenho vinculados a um contrato pelo seu ID numérico.
    * Endpoint: GET /contratos/documentos-relacionados?id={contractId}
+   * Devolve todos os documentos numa única resposta (sem paginação).
    */
-  fetchContractDocuments(
-    contractId: number,
-    pagina?: number,
-  ): Promise<RawContractDocument[]>;
+  fetchContractDocuments(contractId: number): Promise<RawContractDocument[]>;
 }

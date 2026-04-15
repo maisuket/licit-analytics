@@ -120,45 +120,33 @@ export class ContractService {
     for (const contract of savedContracts) {
       if (!contract.externalId) continue;
 
-      let docPage = 1;
-      let hasMoreDocs = true;
+      // O endpoint /contratos/documentos-relacionados devolve todos os
+      // documentos de um contrato numa única resposta — sem paginação.
+      const documents = await this.dataProvider.fetchContractDocuments(
+        contract.externalId,
+      );
 
-      while (hasMoreDocs) {
-        const documents = await this.dataProvider.fetchContractDocuments(
-          contract.externalId,
-          docPage,
-        );
+      for (const doc of documents) {
+        if (!doc.empenhoResumido) continue;
 
-        if (!documents || documents.length === 0) {
-          hasMoreDocs = false;
-          break;
-        }
+        // Correlação exata pelo número resumido do empenho
+        const updated = await this.prisma.expense.updateMany({
+          where: {
+            companyId: company.id,
+            numeroDocumento: doc.empenhoResumido,
+            contractId: null, // Não sobrescreve vínculos já existentes
+          },
+          data: {
+            contractId: contract.id,
+            correlationScore: 1.0,
+            correlationStrategy: 'exact_document',
+          },
+        });
 
-        for (const doc of documents) {
-          if (!doc.empenhoResumido) continue;
-
-          // Correlação exata pelo número resumido do empenho
-          const updated = await this.prisma.expense.updateMany({
-            where: {
-              companyId: company.id,
-              numeroDocumento: doc.empenhoResumido,
-              contractId: null, // Não sobrescreve vínculos já existentes
-            },
-            data: {
-              contractId: contract.id,
-              correlationScore: 1.0,
-              correlationStrategy: 'exact_document',
-            },
-          });
-
-          linkedCount += updated.count;
-        }
-
-        docPage++;
-        await this.sleep(500); // Throttle entre chamadas de documentos
+        linkedCount += updated.count;
       }
 
-      await this.sleep(500); // Throttle entre contratos
+      await this.sleep(300); // Throttle entre contratos
     }
 
     this.logger.log(
