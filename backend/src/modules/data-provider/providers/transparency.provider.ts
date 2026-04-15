@@ -185,11 +185,9 @@ export class TransparencyApiProvider implements IDataProvider {
   /**
    * Busca os documentos (empenhos) vinculados a um contrato pelo seu ID numérico.
    * Endpoint: GET /contratos/documentos-relacionados?id={contractId}
+   * Nota: este endpoint devolve todos os documentos de uma só vez (sem paginação).
    */
-  async fetchContractDocuments(
-    contractId: number,
-    pagina: number = 1,
-  ): Promise<RawContractDocument[]> {
+  async fetchContractDocuments(contractId: number): Promise<RawContractDocument[]> {
     const apiKey = this.configService.get<string>('TRANSPARENCY_API_KEY');
     if (!apiKey) {
       throw new HttpException(
@@ -200,14 +198,14 @@ export class TransparencyApiProvider implements IDataProvider {
 
     try {
       this.logger.log(
-        `Buscando documentos relacionados ao contrato ID: ${contractId} | Página: ${pagina}`,
+        `Buscando documentos relacionados ao contrato ID: ${contractId}`,
       );
 
       const response = await firstValueFrom(
         this.httpService.get(
           `${this.baseUrl}/contratos/documentos-relacionados`,
           {
-            params: { id: contractId, pagina },
+            params: { id: contractId },
             headers: { 'chave-api-dados': apiKey },
           },
         ),
@@ -230,7 +228,7 @@ export class TransparencyApiProvider implements IDataProvider {
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Erro ao buscar documentos do contrato ${contractId} (Página ${pagina}): ${msg}`,
+        `Erro ao buscar documentos do contrato ${contractId}: ${msg}`,
       );
       return [];
     }
